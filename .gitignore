@@ -1,0 +1,7 @@
+# Paketlenmiş plugin zip'i — GitHub Release asset'i olarak yüklenir, repoda tutulmaz
+*.zip
+
+# Geçici / sistem dosyaları
+.DS_Store
+Thumbs.db
+node_modules/
