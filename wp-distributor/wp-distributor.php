@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Distributor
  * Description: Merkez panelden ürünleri otomatik alır ve WooCommerce'e aktarır. Site sahibi hangi kategorilerde ürün satacağını seçer.
- * Version: 1.1.3
+ * Version: 1.1.4
  * Author: WP Central
  * Requires Plugins: woocommerce
  */
