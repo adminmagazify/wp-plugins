@@ -107,6 +107,56 @@ class WPD_Product_Sync {
     }
 
     /**
+     * Merkezden gelen stok güncellemesini uygular (ürünü yeniden OLUŞTURMAZ, sadece stok yazar).
+     * Çift yönlü stok yayılımında kullanılır. set_stock_quantity sipariş hook'unu tetiklemez,
+     * dolayısıyla geri-bildirim döngüsü oluşmaz.
+     *
+     * $su = { sku, stock, variations: [{ sku, stock }] }
+     */
+    public static function apply_stock($su) {
+        if (empty($su['sku'])) {
+            return;
+        }
+        $parent_id = wc_get_product_id_by_sku($su['sku']);
+        if (!$parent_id) {
+            return; // ürün bu sitede yok, atla
+        }
+        $product = wc_get_product($parent_id);
+        if (!$product) {
+            return;
+        }
+
+        // Basit ürün stoğu (varyasyonsuz)
+        if (!$product->is_type('variable') && isset($su['stock'])) {
+            $product->set_manage_stock(true);
+            $product->set_stock_quantity(intval($su['stock']));
+            $product->save();
+        }
+
+        // Varyasyon stokları
+        if (!empty($su['variations']) && is_array($su['variations'])) {
+            foreach ($su['variations'] as $v) {
+                if (empty($v['sku'])) {
+                    continue;
+                }
+                $vid = wc_get_product_id_by_sku($v['sku']);
+                if (!$vid) {
+                    continue;
+                }
+                $variation = wc_get_product($vid);
+                if (!$variation) {
+                    continue;
+                }
+                $variation->set_manage_stock(true);
+                $variation->set_stock_quantity(intval($v['stock']));
+                $variation->save();
+            }
+            // Parent'ı varyasyon stoklarına göre senkronize et (stok durumu)
+            WC_Product_Variable::sync($parent_id);
+        }
+    }
+
+    /**
      * Bu SKU'yu (central-{id}) ve varyasyon SKU'larını (central-{id}-*) tutan TÜM post'ları
      * — çöptekiler dahil — ve arama tablosu (wc_product_meta_lookup) artıklarını kalıcı temizler.
      * wc_get_product_id_by_sku'nun yakalayamadığı öksüz kayıtların yol açtığı

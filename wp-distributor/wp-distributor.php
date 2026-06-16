@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Distributor
  * Description: Merkez panelden ürünleri otomatik alır ve WooCommerce'e aktarır. Site sahibi hangi kategorilerde ürün satacağını seçer.
- * Version: 1.1.7
+ * Version: 1.1.8
  * Author: WP Central
  * Requires Plugins: woocommerce
  */
@@ -20,7 +20,7 @@ if (!defined('WPD_CENTRAL_URL')) {
     define('WPD_CENTRAL_URL', 'https://api-production-76ce.up.railway.app');
 }
 
-define('WPD_VERSION', '1.1.7');
+define('WPD_VERSION', '1.1.8');
 define('WPD_PATH', plugin_dir_path(__FILE__));
 
 require_once WPD_PATH . 'includes/class-api-client.php';
@@ -28,9 +28,14 @@ require_once WPD_PATH . 'includes/class-product-sync.php';
 require_once WPD_PATH . 'includes/class-rest-endpoint.php';
 require_once WPD_PATH . 'includes/class-admin.php';
 require_once WPD_PATH . 'includes/class-updater.php';
+require_once WPD_PATH . 'includes/class-stock.php';
 
 // GitHub release tabanlı otomatik güncelleme
 WPD_Updater::init(__FILE__);
+
+// Çift yönlü stok: sitede satış/iade olunca merkeze bildir (tek ortak havuz)
+add_action('woocommerce_reduce_order_stock', ['WPD_Stock', 'on_reduce'], 20, 1);
+add_action('woocommerce_restore_order_stock', ['WPD_Stock', 'on_restore'], 20, 1);
 
 // Aktivasyonda merkeze otomatik kaydol + güncelleme önbelleğini temizle
 register_activation_hook(__FILE__, ['WPD_Api_Client', 'register_site']);

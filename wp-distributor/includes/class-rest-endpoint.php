@@ -34,10 +34,22 @@ class WPD_Rest_Endpoint {
 
     /** Ürünleri ekler/günceller ve silinmesi gerekenleri kaldırır */
     public static function handle_sync($request) {
-        $body     = $request->get_json_params();
-        $products = isset($body['products']) && is_array($body['products']) ? $body['products'] : [];
-        $deletes  = isset($body['deletes']) && is_array($body['deletes']) ? $body['deletes'] : [];
-        $results  = [];
+        $body         = $request->get_json_params();
+        $products     = isset($body['products']) && is_array($body['products']) ? $body['products'] : [];
+        $deletes      = isset($body['deletes']) && is_array($body['deletes']) ? $body['deletes'] : [];
+        $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
+        $results      = [];
+
+        // Sadece stok güncellemesi (çift yönlü stok yayılımı) — ürünleri yeniden oluşturmaz
+        foreach ($stockUpdates as $su) {
+            $sku = isset($su['sku']) ? $su['sku'] : '';
+            try {
+                WPD_Product_Sync::apply_stock($su);
+                $results[] = ['sku' => $sku, 'status' => 'stock-updated'];
+            } catch (Exception $e) {
+                $results[] = ['sku' => $sku, 'status' => 'error', 'error' => $e->getMessage()];
+            }
+        }
 
         foreach ($products as $item) {
             $pid = isset($item['id']) ? intval($item['id']) : 0;
