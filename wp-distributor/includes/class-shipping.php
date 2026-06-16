@@ -84,6 +84,22 @@ class WPD_Shipping {
         if ($type === 'flat_rate') {
             $cost = (isset($m['cost']) && $m['cost'] !== null && $m['cost'] !== '') ? (string) floatval($m['cost']) : '0';
             $settings['cost'] = $cost;
+
+            // Sınıf bazlı ücretler: merkez slug -> sitedeki gönderim sınıfı term_id eşle
+            if (!empty($m['classCosts']) && is_array($m['classCosts'])) {
+                $has_class = false;
+                foreach ($m['classCosts'] as $slug => $c) {
+                    $term = get_term_by('slug', sanitize_title($slug), 'product_shipping_class');
+                    if (!$term) {
+                        continue; // sınıf bu sitede yoksa atla
+                    }
+                    $settings['class_cost_' . $term->term_id] = (string) floatval($c);
+                    $has_class = true;
+                }
+                if ($has_class) {
+                    $settings['type'] = 'class'; // her gönderim sınıfı için ayrı ücret hesapla
+                }
+            }
         } elseif ($type === 'free_shipping') {
             $min = (isset($m['minAmount']) && $m['minAmount'] !== null && $m['minAmount'] !== '') ? (string) floatval($m['minAmount']) : '';
             if ($min !== '') {
