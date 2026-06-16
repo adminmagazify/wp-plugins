@@ -40,6 +40,16 @@ class WPD_Rest_Endpoint {
         $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
         $results      = [];
 
+        // Gönderim bölgeleri (shipping zones) — WooCommerce'de oluştur/güncelle
+        if (isset($body['shippingZones']) && is_array($body['shippingZones'])) {
+            try {
+                WPD_Shipping::apply($body['shippingZones']);
+                $results[] = ['type' => 'shippingZones', 'status' => 'applied', 'count' => count($body['shippingZones'])];
+            } catch (Exception $e) {
+                $results[] = ['type' => 'shippingZones', 'status' => 'error', 'error' => $e->getMessage()];
+            }
+        }
+
         // Sadece stok güncellemesi (çift yönlü stok yayılımı) — ürünleri yeniden oluşturmaz
         foreach ($stockUpdates as $su) {
             $sku = isset($su['sku']) ? $su['sku'] : '';
