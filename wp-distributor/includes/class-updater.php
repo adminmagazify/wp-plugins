@@ -36,10 +36,13 @@ class WPD_Updater {
         add_action('upgrader_process_complete', [__CLASS__, 'clear_cache'], 10, 0);
     }
 
-    /** En yeni uygun release'i (sürüm + indirme linki) döndürür; yoksa null. */
+    /**
+     * En yeni sürümü MERKEZ API'den (Railway) sorar — doğrudan GitHub'a değil.
+     * Merkez, GitHub'ı sunucu tarafında tek noktadan sorup cache'ler; böylece siteler
+     * GitHub'ın IP başına 60 istek/saat limitine (403) takılmaz. Zip yine GitHub'dan iner.
+     */
     protected static function get_latest_release() {
-        // WordPress'te "Yeniden kontrol et" (force-check) yapıldığında cache'i atla,
-        // GitHub'dan taze veri çek — manuel kontrol her zaman anında sonuç versin.
+        // "Yeniden kontrol et" (force-check) yapıldığında cache'i atla.
         $force = !empty($_GET['force-check']);
 
         if (!$force) {
@@ -49,11 +52,11 @@ class WPD_Updater {
             }
         }
 
-        $url = 'https://api.github.com/repos/' . self::GITHUB_REPO . '/releases?per_page=50';
+        $url = WPD_Api_Client::central_url() . '/api/public/plugin-update';
         $res = wp_remote_get($url, [
             'timeout' => 15,
             'headers' => [
-                'Accept'     => 'application/vnd.github+json',
+                'Accept'     => 'application/json',
                 'User-Agent' => 'wp-distributor-updater',
             ],
         ]);
@@ -63,52 +66,20 @@ class WPD_Updater {
             return null;
         }
 
-        $releases = json_decode(wp_remote_retrieve_body($res), true);
-        if (!is_array($releases)) {
-            set_transient(self::CACHE_KEY, '', 1800);
+        $data = json_decode(wp_remote_retrieve_body($res), true);
+        if (!is_array($data) || empty($data['version']) || empty($data['download_url'])) {
+            set_transient(self::CACHE_KEY, '', 900); // sürüm yok/eksik: 15 dk
             return null;
         }
 
-        $best = null;
-        foreach ($releases as $rel) {
-            if (!empty($rel['draft']) || !empty($rel['prerelease'])) {
-                continue;
-            }
-            $tag = isset($rel['tag_name']) ? $rel['tag_name'] : '';
-            if (strpos($tag, self::TAG_PREFIX) !== 0) {
-                continue;
-            }
-            $version = ltrim(substr($tag, strlen(self::TAG_PREFIX)), 'vV');
-            if ($version === '') {
-                continue;
-            }
+        $best = [
+            'version'   => (string) $data['version'],
+            'download'  => (string) $data['download_url'],
+            'changelog' => isset($data['changelog']) ? $data['changelog'] : '',
+            'name'      => isset($data['name']) ? $data['name'] : 'WP Distributor',
+        ];
 
-            // Release'e eklenmiş wp-distributor.zip asset'ini bul
-            $download = '';
-            $assets = isset($rel['assets']) && is_array($rel['assets']) ? $rel['assets'] : [];
-            foreach ($assets as $asset) {
-                if (isset($asset['name']) && $asset['name'] === self::ASSET_NAME) {
-                    $download = $asset['browser_download_url'];
-                    break;
-                }
-            }
-            if ($download === '') {
-                continue;
-            }
-
-            if ($best === null || version_compare($version, $best['version'], '>')) {
-                $best = [
-                    'version'   => $version,
-                    'download'  => $download,
-                    'changelog' => isset($rel['body']) ? $rel['body'] : '',
-                    'name'      => isset($rel['name']) ? $rel['name'] : $tag,
-                ];
-            }
-        }
-
-        // Bulunan release'i tam süre cache'le; bulunamazsa kısa süre (15 dk) cache'le
-        // ki release'e asset sonradan eklenince durum hızlı düzelsin (6 saat takılı kalmasın).
-        set_transient(self::CACHE_KEY, $best ?: '', $best ? self::CACHE_TTL : 900);
+        set_transient(self::CACHE_KEY, $best, self::CACHE_TTL);
         return $best;
     }
 
