@@ -148,13 +148,36 @@ class WPD_Product_Sync {
             }
         }
 
-        // Kargo sınıfı
+        // Kargo sınıfı — sitede yoksa WooCommerce'de oluştur, sonra ata
         if (!empty($item['shippingClass'])) {
-            $shipping_term = get_term_by('slug', sanitize_title($item['shippingClass']), 'product_shipping_class');
-            if ($shipping_term) {
-                $product->set_shipping_class_id($shipping_term->term_id);
+            $term_id = self::ensure_shipping_class($item['shippingClass'], isset($item['shippingClassName']) ? $item['shippingClassName'] : '');
+            if ($term_id) {
+                $product->set_shipping_class_id($term_id);
             }
         }
+    }
+
+    /**
+     * Gönderim sınıfı term'ini (product_shipping_class) slug'a göre bulur; yoksa oluşturur.
+     * Ad merkezden gelirse onu kullanır (örn. "Ücretsiz Gönderim"), yoksa slug'ı ad yapar.
+     */
+    protected static function ensure_shipping_class($slug, $name) {
+        $slug = sanitize_title($slug);
+        if ($slug === '') {
+            return 0;
+        }
+        $term = get_term_by('slug', $slug, 'product_shipping_class');
+        if ($term) {
+            return $term->term_id;
+        }
+        $label = trim((string) $name) !== '' ? sanitize_text_field($name) : $slug;
+        $created = wp_insert_term($label, 'product_shipping_class', ['slug' => $slug]);
+        if (is_wp_error($created)) {
+            // Yarış durumu: araya başka istek girip oluşturmuş olabilir
+            $term = get_term_by('slug', $slug, 'product_shipping_class');
+            return $term ? $term->term_id : 0;
+        }
+        return $created['term_id'];
     }
 
     /** Basit ürün (bedensiz) */
