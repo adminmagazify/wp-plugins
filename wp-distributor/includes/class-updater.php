@@ -38,9 +38,15 @@ class WPD_Updater {
 
     /** En yeni uygun release'i (sürüm + indirme linki) döndürür; yoksa null. */
     protected static function get_latest_release() {
-        $cached = get_transient(self::CACHE_KEY);
-        if ($cached !== false) {
-            return $cached ?: null;
+        // WordPress'te "Yeniden kontrol et" (force-check) yapıldığında cache'i atla,
+        // GitHub'dan taze veri çek — manuel kontrol her zaman anında sonuç versin.
+        $force = !empty($_GET['force-check']);
+
+        if (!$force) {
+            $cached = get_transient(self::CACHE_KEY);
+            if ($cached !== false) {
+                return $cached ?: null;
+            }
         }
 
         $url = 'https://api.github.com/repos/' . self::GITHUB_REPO . '/releases?per_page=50';
@@ -100,7 +106,9 @@ class WPD_Updater {
             }
         }
 
-        set_transient(self::CACHE_KEY, $best ?: '', self::CACHE_TTL);
+        // Bulunan release'i tam süre cache'le; bulunamazsa kısa süre (15 dk) cache'le
+        // ki release'e asset sonradan eklenince durum hızlı düzelsin (6 saat takılı kalmasın).
+        set_transient(self::CACHE_KEY, $best ?: '', $best ? self::CACHE_TTL : 900);
         return $best;
     }
 
