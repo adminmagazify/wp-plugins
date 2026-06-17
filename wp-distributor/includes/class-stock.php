@@ -71,20 +71,35 @@ class WPD_Stock {
         self::send($items);
     }
 
-    /** Merkeze fire-and-forget bildirim (checkout'u yavaşlatmaz) */
+    /**
+     * Merkeze stok bildirimi. Güvenilirlik için:
+     * - İstek merkeze ULAŞIRSA (2xx/4xx/5xx fark etmez) tek sefer → çift sayım olmaz.
+     * - Sadece BAĞLANTI hatasında (istek ulaşmadı) 1 kez daha dener.
+     * - Yine ulaşmazsa error_log'a yazar (admin görebilsin), stok kaybı tespit edilebilir.
+     */
     protected static function send($items) {
         $key = WPD_Api_Client::get_api_key();
         if (!$key) {
             return;
         }
-        wp_remote_post(WPD_Api_Client::central_url() . '/api/public/stock-report', [
-            'timeout'  => 15,
-            'blocking' => false, // yanıtı bekleme
-            'headers'  => [
-                'Content-Type' => 'application/json',
-                'X-API-Key'    => $key,
+        $url = WPD_Api_Client::central_url() . '/api/public/stock-report';
+        $args = [
+            'timeout' => 8,
+            'headers' => [
+                'Content-Type'     => 'application/json',
+                'X-API-Key'        => $key,
+                'X-Plugin-Version' => WPD_VERSION,
             ],
             'body' => wp_json_encode(['items' => $items]),
-        ]);
+        ];
+
+        for ($i = 0; $i < 2; $i++) {
+            $res = wp_remote_post($url, $args);
+            if (!is_wp_error($res)) {
+                return; // merkeze ulaştı (yanıt kodu ne olursa olsun) — tekrar etme
+            }
+            usleep(300000); // 0.3 sn bekle, tekrar dene (bağlantı hatası → istek ulaşmadı)
+        }
+        error_log('[wp-distributor] Stok bildirimi merkeze ULAŞMADI: ' . wp_json_encode($items));
     }
 }

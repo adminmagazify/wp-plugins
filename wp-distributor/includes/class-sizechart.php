@@ -42,8 +42,9 @@ class WPD_SizeChartSync {
         $res = wp_remote_post(WPD_Api_Client::central_url() . '/api/public/size-charts/import', [
             'timeout' => 30,
             'headers' => [
-                'Content-Type' => 'application/json',
-                'X-API-Key'    => $key,
+                'Content-Type'     => 'application/json',
+                'X-API-Key'        => $key,
+                'X-Plugin-Version' => WPD_VERSION,
             ],
             'body' => wp_json_encode(['charts' => $charts]),
         ]);

@@ -35,7 +35,7 @@ class WPD_Api_Client {
     public static function register_site() {
         $res = wp_remote_post(self::central_url() . '/api/public/register', [
             'timeout' => 20,
-            'headers' => ['Content-Type' => 'application/json'],
+            'headers' => ['Content-Type' => 'application/json', 'X-Plugin-Version' => WPD_VERSION],
             'body'    => wp_json_encode([
                 'domain'     => self::get_domain(),
                 'ownerName'  => get_bloginfo('name'),
@@ -68,7 +68,7 @@ class WPD_Api_Client {
     public static function fetch_categories() {
         $res = wp_remote_get(self::central_url() . '/api/public/categories', [
             'timeout' => 15,
-            'headers' => ['X-API-Key' => self::get_api_key()],
+            'headers' => ['X-API-Key' => self::get_api_key(), 'X-Plugin-Version' => WPD_VERSION],
         ]);
         if (is_wp_error($res)) {
             return [];
@@ -81,7 +81,7 @@ class WPD_Api_Client {
     public static function fetch_selected_category_ids() {
         $res = wp_remote_get(self::central_url() . '/api/public/me', [
             'timeout' => 15,
-            'headers' => ['X-API-Key' => self::get_api_key()],
+            'headers' => ['X-API-Key' => self::get_api_key(), 'X-Plugin-Version' => WPD_VERSION],
         ]);
         if (is_wp_error($res)) {
             return [];
@@ -96,8 +96,9 @@ class WPD_Api_Client {
             'method'  => 'PUT',
             'timeout' => 15,
             'headers' => [
-                'Content-Type' => 'application/json',
-                'X-API-Key'    => self::get_api_key(),
+                'Content-Type'     => 'application/json',
+                'X-API-Key'        => self::get_api_key(),
+                'X-Plugin-Version' => WPD_VERSION,
             ],
             'body' => wp_json_encode(['categoryIds' => array_map('intval', (array) $category_ids)]),
         ]);
