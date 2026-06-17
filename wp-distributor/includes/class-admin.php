@@ -45,6 +45,17 @@ class WPD_Admin {
             );
         }
 
+        // Beden tablolarını merkeze çek (pull)
+        if (isset($_POST['wpd_pull_charts']) && check_admin_referer('wpd_pull_charts')) {
+            $r = WPD_SizeChartSync::pull_to_central();
+            add_settings_error(
+                'wpd',
+                'charts',
+                $r['success'] ? ('Beden tabloları merkeze çekildi: ' . $r['imported'] . ' tablo.') : ('Hata: ' . $r['message']),
+                $r['success'] ? 'success' : 'error'
+            );
+        }
+
         // Kategori seçimini kaydet
         if (isset($_POST['wpd_save_categories']) && check_admin_referer('wpd_categories')) {
             $cats = isset($_POST['categories']) ? array_map('intval', (array) $_POST['categories']) : [];

@@ -53,12 +53,80 @@ class WPD_Product_Sync {
             self::assign_brand_term($product_id, $item['brand']);
         }
 
-        // Beden tablosu
+        // Beden tablosu — Loobek ts_size_chart varsa onunla entegre, yoksa HTML fallback
+        self::apply_size_chart($product_id, $item);
+
+        return $product_id;
+    }
+
+    /**
+     * Beden tablosunu ürüne uygular.
+     * Tema (Loobek) 'ts_size_chart' post tipini sağlıyorsa: merkez tablosunu ts_size_chart
+     * post'u olarak oluştur/güncelle ve ürünü o tabloya bağla (temanın native gösterimi).
+     * Yoksa: eski davranış — _wpd_size_chart meta'sına HTML yaz (kendi sekmemiz gösterir).
+     */
+    protected static function apply_size_chart($product_id, $item) {
+        $chart = isset($item['sizeChart']) && is_array($item['sizeChart']) ? $item['sizeChart'] : null;
+
+        if ($chart && post_type_exists('ts_size_chart')) {
+            $chart_post_id = self::ensure_ts_size_chart($chart);
+            if ($chart_post_id) {
+                update_post_meta($product_id, '_ts_size_chart', $chart_post_id);
+                update_post_meta($product_id, 'ts_prod_size_chart', $chart_post_id);
+            }
+            return;
+        }
+
+        // Tablo kaldırıldıysa native bağlantıyı temizle
+        if (!$chart && post_type_exists('ts_size_chart')) {
+            delete_post_meta($product_id, '_ts_size_chart');
+            delete_post_meta($product_id, 'ts_prod_size_chart');
+        }
+
+        // Fallback: kendi HTML sekmemiz
         if (isset($item['sizeChartHtml'])) {
             update_post_meta($product_id, '_wpd_size_chart', wp_kses_post($item['sizeChartHtml']));
         }
+    }
 
-        return $product_id;
+    /**
+     * Merkez beden tablosunu Loobek 'ts_size_chart' post'u olarak oluşturur/günceller.
+     * Idempotent: _wpd_central_chart_id meta'sı ile eşler, tekrar gönderimde çoğaltmaz.
+     */
+    protected static function ensure_ts_size_chart($chart) {
+        $central_id = isset($chart['id']) ? intval($chart['id']) : 0;
+        $name = isset($chart['name']) ? sanitize_text_field($chart['name']) : 'Beden Tablosu';
+        $table = isset($chart['table']) && is_array($chart['table']) ? $chart['table'] : [];
+
+        $existing = get_posts([
+            'post_type'   => 'ts_size_chart',
+            'numberposts' => 1,
+            'post_status' => 'any',
+            'fields'      => 'ids',
+            'meta_key'    => '_wpd_central_chart_id',
+            'meta_value'  => $central_id,
+        ]);
+
+        $post_id = !empty($existing) ? (int) $existing[0] : 0;
+        if ($post_id) {
+            wp_update_post(['ID' => $post_id, 'post_title' => $name, 'post_status' => 'publish']);
+        } else {
+            $post_id = wp_insert_post([
+                'post_type'   => 'ts_size_chart',
+                'post_title'  => $name,
+                'post_status' => 'publish',
+            ]);
+            if (is_wp_error($post_id) || !$post_id) {
+                return 0;
+            }
+            update_post_meta($post_id, '_wpd_central_chart_id', $central_id);
+        }
+
+        // Loobek beklediği format: ts_chart_table = JSON 2B dizi
+        update_post_meta($post_id, 'ts_chart_table', wp_json_encode($table, JSON_UNESCAPED_UNICODE));
+        update_post_meta($post_id, 'ts_chart_label', 'Beden Tablosu');
+
+        return $post_id;
     }
 
     /**

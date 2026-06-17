@@ -81,5 +81,18 @@ if (!defined('ABSPATH')) {
         </form>
     <?php endif; ?>
 
-    <h2>WooCommerce Konfigürasyonu</h2>
+    <?php if ($registered && post_type_exists('ts_size_chart')): ?>
+        <hr style="margin:30px 0;">
+        <h2>Beden Tabloları</h2>
+        <p class="description">
+            Bu sitedeki mevcut beden tablolarını (Size Charts) merkez panele aktarır.
+            Merkeze çektikten sonra panelden yönetip tüm sitelere dağıtabilirsiniz.
+        </p>
+        <form method="post" style="margin-top:10px;">
+            <?php wp_nonce_field('wpd_pull_charts'); ?>
+            <button type="submit" class="button button-secondary" name="wpd_pull_charts" value="1">
+                Beden Tablolarını Merkeze Çek
+            </button>
+        </form>
+    <?php endif; ?>
 </div>
