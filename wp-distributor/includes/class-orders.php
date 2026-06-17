@@ -11,7 +11,8 @@ if (!defined('ABSPATH')) {
 class WPD_Orders {
 
     public static function on_status($order_id, $old_status, $new_status, $order = null) {
-        if (!in_array($new_status, ['processing', 'completed'], true)) {
+        // Ödeme onaylı (processing/completed) + havale/EFT (on-hold) siparişleri raporla
+        if (!in_array($new_status, ['processing', 'completed', 'on-hold'], true)) {
             return;
         }
         if (!($order instanceof WC_Order)) {
