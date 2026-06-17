@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Distributor
  * Description: Merkez panelden ürünleri otomatik alır ve WooCommerce'e aktarır. Site sahibi hangi kategorilerde ürün satacağını seçer.
- * Version: 1.1.15
+ * Version: 1.1.16
  * Author: WP Central
  * Requires Plugins: woocommerce
  */
@@ -20,7 +20,7 @@ if (!defined('WPD_CENTRAL_URL')) {
     define('WPD_CENTRAL_URL', 'https://api-production-76ce.up.railway.app');
 }
 
-define('WPD_VERSION', '1.1.15');
+define('WPD_VERSION', '1.1.16');
 define('WPD_PATH', plugin_dir_path(__FILE__));
 
 require_once WPD_PATH . 'includes/class-api-client.php';
@@ -31,6 +31,7 @@ require_once WPD_PATH . 'includes/class-updater.php';
 require_once WPD_PATH . 'includes/class-stock.php';
 require_once WPD_PATH . 'includes/class-shipping.php';
 require_once WPD_PATH . 'includes/class-sizechart.php';
+require_once WPD_PATH . 'includes/class-orders.php';
 
 // GitHub release tabanlı otomatik güncelleme
 WPD_Updater::init(__FILE__);
@@ -38,6 +39,9 @@ WPD_Updater::init(__FILE__);
 // Çift yönlü stok: sitede satış/iade olunca merkeze bildir (tek ortak havuz)
 add_action('woocommerce_reduce_order_stock', ['WPD_Stock', 'on_reduce'], 20, 1);
 add_action('woocommerce_restore_order_stock', ['WPD_Stock', 'on_restore'], 20, 1);
+
+// Satış paneli: sipariş ödenince/tamamlanınca merkeze raporla
+add_action('woocommerce_order_status_changed', ['WPD_Orders', 'on_status'], 20, 4);
 
 // Aktivasyonda merkeze otomatik kaydol + güncelleme önbelleğini temizle
 register_activation_hook(__FILE__, ['WPD_Api_Client', 'register_site']);
