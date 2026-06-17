@@ -40,6 +40,17 @@ class WPD_Rest_Endpoint {
         $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
         $results      = [];
 
+        // Beden tabloları (ürüne bağlamadan) — Loobek ts_size_chart olarak oluştur/güncelle
+        if (isset($body['sizeCharts']) && is_array($body['sizeCharts'])) {
+            $applied = 0;
+            foreach ($body['sizeCharts'] as $chart) {
+                if (WPD_Product_Sync::upsert_size_chart_post($chart)) {
+                    $applied++;
+                }
+            }
+            $results[] = ['type' => 'sizeCharts', 'status' => 'applied', 'count' => $applied];
+        }
+
         // Gönderim bölgeleri (shipping zones) — WooCommerce'de oluştur/güncelle
         if (isset($body['shippingZones']) && is_array($body['shippingZones'])) {
             try {

@@ -90,6 +90,17 @@ class WPD_Product_Sync {
     }
 
     /**
+     * Tek bir beden tablosunu (ürüne bağlamadan) ts_size_chart post'u olarak oluşturur/günceller.
+     * Panel'deki "Sitelere Gönder" butonu bunu kullanır. ts_size_chart yoksa 0 döner.
+     */
+    public static function upsert_size_chart_post($chart) {
+        if (!is_array($chart) || empty($chart['id']) || !post_type_exists('ts_size_chart')) {
+            return 0;
+        }
+        return self::ensure_ts_size_chart($chart);
+    }
+
+    /**
      * Merkez beden tablosunu Loobek 'ts_size_chart' post'u olarak oluşturur/günceller.
      * Idempotent: _wpd_central_chart_id meta'sı ile eşler, tekrar gönderimde çoğaltmaz.
      */
