@@ -18,8 +18,12 @@ class WPD_Product_Sync {
             throw new Exception('Eksik ürün verisi');
         }
 
-        $sku = 'central-' . intval($item['id']);
-        $existing_id = wc_get_product_id_by_sku($sku);
+        $central_id = intval($item['id']);
+        // Görünen ürün kodu: merkezden özel SKU geldiyse onu kullan, yoksa central-{id}
+        $sku = (!empty($item['sku'])) ? sanitize_text_field($item['sku']) : 'central-' . $central_id;
+
+        // Eşleştirme: önce _wpd_central_id meta'sı, yoksa eski central-{id} SKU'su (geriye dönük)
+        $existing_id = self::find_by_central_id($central_id);
 
         $variations = (isset($item['variations']) && is_array($item['variations'])) ? $item['variations'] : [];
         $has_variations = count($variations) > 0;
@@ -35,7 +39,7 @@ class WPD_Product_Sync {
         }
 
         // Sıfırdan oluşturulacaksa bu SKU'yu tutan öksüz/çöp/bayat kayıtları temizle
-        // (wc_get_product_id_by_sku'nun bulamadığı artıkların duplicate-SKU hatasını önler)
+        // (duplicate-SKU hatasını önler)
         if (!$existing_id) {
             self::purge_sku_family($sku);
         }
@@ -45,6 +49,9 @@ class WPD_Product_Sync {
         } else {
             $product_id = self::upsert_simple($existing_id, $sku, $item);
         }
+
+        // Merkez ID'sini meta olarak sakla (SKU özel olsa da eşleştirme/stok bununla yapılır)
+        update_post_meta($product_id, '_wpd_central_id', $central_id);
 
         self::sync_images($product_id, $item);
 
@@ -180,9 +187,33 @@ class WPD_Product_Sync {
         return '';
     }
 
+    /**
+     * Merkez ID'sine göre WooCommerce ürününü bulur.
+     * Önce _wpd_central_id meta'sı, yoksa eski central-{id} SKU'su (geriye dönük uyum).
+     */
+    protected static function find_by_central_id($central_id) {
+        $q = get_posts([
+            'post_type'   => 'product',
+            'numberposts' => 1,
+            'post_status' => 'any',
+            'fields'      => 'ids',
+            'meta_key'    => '_wpd_central_id',
+            'meta_value'  => intval($central_id),
+        ]);
+        if (!empty($q)) {
+            return (int) $q[0];
+        }
+        $old = wc_get_product_id_by_sku('central-' . intval($central_id));
+        return $old ? (int) $old : 0;
+    }
+
     /** Merkezdeki ID'ye karşılık gelen ürünü (varsa) WooCommerce'den kalıcı siler */
     public static function delete_by_central_id($id) {
-        self::purge_sku_family('central-' . intval($id));
+        $pid = self::find_by_central_id(intval($id));
+        if ($pid) {
+            wp_delete_post($pid, true);
+        }
+        self::purge_sku_family('central-' . intval($id)); // eski şema artıklarını da temizle
     }
 
     /**
@@ -193,10 +224,13 @@ class WPD_Product_Sync {
      * $su = { sku, stock, variations: [{ sku, stock }] }
      */
     public static function apply_stock($su) {
-        if (empty($su['sku'])) {
-            return;
+        // Ürünü merkez ID'sinden bul (özel SKU'lar için), yoksa eski sku alanından
+        $parent_id = 0;
+        if (!empty($su['centralId'])) {
+            $parent_id = self::find_by_central_id(intval($su['centralId']));
+        } elseif (!empty($su['sku'])) {
+            $parent_id = wc_get_product_id_by_sku($su['sku']);
         }
-        $parent_id = wc_get_product_id_by_sku($su['sku']);
         if (!$parent_id) {
             return; // ürün bu sitede yok, atla
         }
@@ -212,17 +246,34 @@ class WPD_Product_Sync {
             $product->save();
         }
 
-        // Varyasyon stokları
+        // Varyasyon stokları — beden (size) ile eşle
         if (!empty($su['variations']) && is_array($su['variations'])) {
+            // beden slug → child id haritası
+            $children = [];
+            foreach ($product->get_children() as $cid) {
+                $cv = wc_get_product($cid);
+                if (!$cv) {
+                    continue;
+                }
+                $attrs = $cv->get_attributes();
+                $val = isset($attrs['beden']) ? $attrs['beden'] : '';
+                if ($val !== '') {
+                    $children[sanitize_title($val)] = $cid;
+                }
+            }
             foreach ($su['variations'] as $v) {
-                if (empty($v['sku'])) {
+                // Yeni format: { size, stock }; eski format: { sku, stock }
+                $cid = 0;
+                if (isset($v['size']) && $v['size'] !== '') {
+                    $key = sanitize_title($v['size']);
+                    $cid = isset($children[$key]) ? $children[$key] : 0;
+                } elseif (!empty($v['sku'])) {
+                    $cid = wc_get_product_id_by_sku($v['sku']);
+                }
+                if (!$cid) {
                     continue;
                 }
-                $vid = wc_get_product_id_by_sku($v['sku']);
-                if (!$vid) {
-                    continue;
-                }
-                $variation = wc_get_product($vid);
+                $variation = wc_get_product($cid);
                 if (!$variation) {
                     continue;
                 }
@@ -230,7 +281,6 @@ class WPD_Product_Sync {
                 $variation->set_stock_quantity(intval($v['stock']));
                 $variation->save();
             }
-            // Parent'ı varyasyon stoklarına göre senkronize et (stok durumu)
             WC_Product_Variable::sync($parent_id);
         }
     }

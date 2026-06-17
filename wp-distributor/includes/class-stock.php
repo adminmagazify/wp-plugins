@@ -36,15 +36,32 @@ class WPD_Stock {
             if (!$product) {
                 continue;
             }
-            $sku = (string) $product->get_sku();
-            if (strpos($sku, 'central-') !== 0) {
-                continue; // merkez ürünü değil, atla
-            }
             $qty = (int) $item->get_quantity();
             if ($qty <= 0) {
                 continue;
             }
-            $items[] = ['sku' => $sku, 'delta' => $sign * $qty];
+
+            $is_var    = $product->is_type('variation');
+            $parent_id = $is_var ? $product->get_parent_id() : $product->get_id();
+            $central_id = (int) get_post_meta($parent_id, '_wpd_central_id', true);
+
+            // Varyasyonsa beden değerini al
+            $size = '';
+            if ($is_var) {
+                $attrs = $product->get_attributes();
+                $size = isset($attrs['beden']) ? $attrs['beden'] : '';
+            }
+
+            if ($central_id) {
+                $items[] = ['centralId' => $central_id, 'size' => $size, 'delta' => $sign * $qty];
+            } else {
+                // Geriye dönük: _wpd_central_id yoksa eski central-{id} SKU'su
+                $sku = (string) $product->get_sku();
+                if (strpos($sku, 'central-') !== 0) {
+                    continue; // merkez ürünü değil, atla
+                }
+                $items[] = ['sku' => $sku, 'delta' => $sign * $qty];
+            }
         }
 
         if (empty($items)) {
