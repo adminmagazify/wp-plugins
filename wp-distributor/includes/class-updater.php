@@ -148,12 +148,19 @@ class WPD_Updater {
         if (empty($hook_extra['plugin']) || $hook_extra['plugin'] !== self::$plugin_file) {
             return $source;
         }
+        global $wp_filesystem;
+        if (!$wp_filesystem) {
+            return $source;
+        }
         $desired = trailingslashit($remote_source) . self::$plugin_slug . '/';
         if (untrailingslashit($source) === untrailingslashit($desired)) {
             return $source;
         }
-        global $wp_filesystem;
-        if ($wp_filesystem && $wp_filesystem->move(untrailingslashit($source), untrailingslashit($desired))) {
+        // Hedef zaten varsa önce sil
+        if ($wp_filesystem->is_dir(untrailingslashit($desired))) {
+            $wp_filesystem->delete(untrailingslashit($desired), true);
+        }
+        if ($wp_filesystem->move(untrailingslashit($source), untrailingslashit($desired))) {
             return $desired;
         }
         return $source;

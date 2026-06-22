@@ -321,7 +321,7 @@ class WPD_Product_Sync {
         $product->set_status(!empty($item['active']) ? 'publish' : 'draft');
 
         if (!empty($item['categoryName'])) {
-            $term_id = self::ensure_category($item['categoryName'], $item['categorySlug'] ?? '');
+            $term_id = self::ensure_category($item['categoryName'], isset($item['categorySlug']) ? $item['categorySlug'] : '');
             if ($term_id) {
                 $product->set_category_ids([$term_id]);
             }

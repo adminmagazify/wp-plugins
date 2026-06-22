@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Distributor
  * Description: Merkez panelden ürünleri otomatik alır ve WooCommerce'e aktarır. Site sahibi hangi kategorilerde ürün satacağını seçer.
- * Version: 1.2.0
+ * Version: 1.2.1
  * Author: WP Central
  * Requires Plugins: woocommerce
  */
@@ -20,7 +20,7 @@ if (!defined('WPD_CENTRAL_URL')) {
     define('WPD_CENTRAL_URL', 'https://api-production-76ce.up.railway.app');
 }
 
-define('WPD_VERSION', '1.2.0');
+define('WPD_VERSION', '1.2.1');
 define('WPD_PATH', plugin_dir_path(__FILE__));
 
 require_once WPD_PATH . 'includes/class-api-client.php';
@@ -56,10 +56,24 @@ if (is_admin()) {
     add_action('admin_init', ['WPD_Admin', 'handle_actions']);
 }
 
-// WooCommerce ürün sekmesine "Beden Tablosu" ekle
+// WooCommerce ürün sekmesine "Beden Tablosu" ekle — yalnızca "Giyim" kategorisindeki ürünlerde
 add_filter('woocommerce_product_tabs', function ($tabs) {
     global $product;
     if (!$product) return $tabs;
+
+    // Beden tablosu sadece giyim kategorisinde (alt kategoriler dahil: "Erkek Giyim" vb.) gösterilir
+    $is_clothing = false;
+    $terms = get_the_terms($product->get_id(), 'product_cat');
+    if ($terms && !is_wp_error($terms)) {
+        foreach ($terms as $t) {
+            if (stripos($t->slug, 'giyim') !== false || stripos($t->name, 'giyim') !== false) {
+                $is_clothing = true;
+                break;
+            }
+        }
+    }
+    if (!$is_clothing) return $tabs;
+
     $chart_html = get_post_meta($product->get_id(), '_wpd_size_chart', true);
     if (!$chart_html) return $tabs;
     $tabs['wpd_size_chart'] = [
