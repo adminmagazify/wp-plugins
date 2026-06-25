@@ -40,6 +40,19 @@ class WPD_Rest_Endpoint {
         $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
         $results      = [];
 
+        // Markalar (ürüne bağlamadan) — WooCommerce product_brand term'leri olarak oluştur
+        if (isset($body['brands']) && is_array($body['brands'])) {
+            $applied = 0;
+            foreach ($body['brands'] as $b) {
+                $name = isset($b['name']) ? $b['name'] : '';
+                $slug = isset($b['slug']) ? $b['slug'] : '';
+                if ($name && WPD_Product_Sync::ensure_brand_term($name, $slug)) {
+                    $applied++;
+                }
+            }
+            $results[] = ['type' => 'brands', 'status' => 'applied', 'count' => $applied];
+        }
+
         // Kategoriler (ürüne bağlamadan) — WooCommerce product_cat term'leri olarak oluştur
         if (isset($body['categories']) && is_array($body['categories'])) {
             $applied = 0;

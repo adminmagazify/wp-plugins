@@ -187,6 +187,29 @@ class WPD_Product_Sync {
         return '';
     }
 
+    /** Marka taksonomisinde term'i isimle bulur; yoksa oluşturur (merkez marka push'u). */
+    public static function ensure_brand_term($name, $slug = '') {
+        $taxonomy = self::detect_brand_taxonomy();
+        if (!$taxonomy) {
+            return 0;
+        }
+        $name = sanitize_text_field($name);
+        if ($name === '') {
+            return 0;
+        }
+        $term = get_term_by('name', $name, $taxonomy);
+        if ($term) {
+            return (int) $term->term_id;
+        }
+        $args = $slug ? ['slug' => sanitize_title($slug)] : [];
+        $created = wp_insert_term($name, $taxonomy, $args);
+        if (is_wp_error($created)) {
+            $term = get_term_by('name', $name, $taxonomy);
+            return $term ? (int) $term->term_id : 0;
+        }
+        return (int) $created['term_id'];
+    }
+
     /**
      * Merkez ID'sine göre WooCommerce ürününü bulur.
      * Önce _wpd_central_id meta'sı, yoksa eski central-{id} SKU'su (geriye dönük uyum).
@@ -365,6 +388,12 @@ class WPD_Product_Sync {
         $product->set_sku($sku);
         self::apply_base($product, $item);
         $product->set_regular_price((string) $item['price']);
+        // İndirim fiyatı (varsa uygula, yoksa temizle)
+        if (isset($item['salePrice']) && $item['salePrice'] !== '' && $item['salePrice'] !== null) {
+            $product->set_sale_price((string) $item['salePrice']);
+        } else {
+            $product->set_sale_price('');
+        }
         $product->set_manage_stock(true);
         $product->set_stock_quantity(intval($item['stock']));
 
