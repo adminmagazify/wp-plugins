@@ -343,11 +343,23 @@ class WPD_Product_Sync {
 
         $product->set_status(!empty($item['active']) ? 'publish' : 'draft');
 
-        if (!empty($item['categoryName'])) {
-            $term_id = self::ensure_category($item['categoryName'], isset($item['categorySlug']) ? $item['categorySlug'] : '');
-            if ($term_id) {
-                $product->set_category_ids([$term_id]);
+        // Çoklu kategori: categoryNames varsa hepsini ata; yoksa tek categoryName (geriye uyumlu)
+        $cat_ids = [];
+        if (!empty($item['categoryNames']) && is_array($item['categoryNames'])) {
+            foreach ($item['categoryNames'] as $cname) {
+                $cid = self::ensure_category($cname, '');
+                if ($cid) {
+                    $cat_ids[] = $cid;
+                }
             }
+        } elseif (!empty($item['categoryName'])) {
+            $cid = self::ensure_category($item['categoryName'], isset($item['categorySlug']) ? $item['categorySlug'] : '');
+            if ($cid) {
+                $cat_ids[] = $cid;
+            }
+        }
+        if ($cat_ids) {
+            $product->set_category_ids(array_values(array_unique($cat_ids)));
         }
 
         // Kargo sınıfı — sitede yoksa WooCommerce'de oluştur, sonra ata
