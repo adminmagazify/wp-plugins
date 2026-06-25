@@ -517,6 +517,12 @@ class WPD_Product_Sync {
             // Beden fiyatı varsa onu kullan, yoksa ürün fiyatı
             $var_price = (!empty($v['price']) && $v['price'] !== null) ? (string) $v['price'] : (string) $item['price'];
             $variation->set_regular_price($var_price);
+            // Beden indirim fiyatı (varsa uygula, yoksa temizle)
+            if (isset($v['salePrice']) && $v['salePrice'] !== '' && $v['salePrice'] !== null) {
+                $variation->set_sale_price((string) $v['salePrice']);
+            } else {
+                $variation->set_sale_price('');
+            }
             $variation->set_manage_stock(true);
             $variation->set_stock_quantity(intval($v['stock']));
             $variation->set_status('publish');
