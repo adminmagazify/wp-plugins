@@ -119,6 +119,12 @@ class WPD_Rest_Endpoint {
             }
         }
 
+        // LiteSpeed Cache: ürün/fiyat/kategori değişti → mağaza & arşiv sayfalarını tazele
+        // (push toplu çalışır; tek seferde tüm cache'i geçersiz kılmak en güvenlisi)
+        if (!empty($results)) {
+            do_action('litespeed_purge_all');
+        }
+
         return rest_ensure_response(['results' => $results]);
     }
 }

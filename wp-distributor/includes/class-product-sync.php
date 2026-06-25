@@ -63,6 +63,9 @@ class WPD_Product_Sync {
         // Beden tablosu — Loobek ts_size_chart varsa onunla entegre, yoksa HTML fallback
         self::apply_size_chart($product_id, $item);
 
+        // LiteSpeed Cache: bu ürünün sayfa cache'ini temizle (eklenti yoksa no-op)
+        do_action('litespeed_purge_post', $product_id);
+
         return $product_id;
     }
 
