@@ -505,7 +505,7 @@ class WPD_Product_Sync {
         $product->set_attributes(array_values(array_merge(array_values($others), [$brand_attr])));
     }
 
-    protected static function ensure_category($name, $slug) {
+    public static function ensure_category($name, $slug) {
         $slug = sanitize_title($slug ? $slug : $name);
         $term = get_term_by('slug', $slug, 'product_cat');
         if ($term) {

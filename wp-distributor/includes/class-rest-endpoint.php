@@ -40,6 +40,19 @@ class WPD_Rest_Endpoint {
         $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
         $results      = [];
 
+        // Kategoriler (ürüne bağlamadan) — WooCommerce product_cat term'leri olarak oluştur
+        if (isset($body['categories']) && is_array($body['categories'])) {
+            $applied = 0;
+            foreach ($body['categories'] as $cat) {
+                $name = isset($cat['name']) ? $cat['name'] : '';
+                $slug = isset($cat['slug']) ? $cat['slug'] : '';
+                if ($name && WPD_Product_Sync::ensure_category($name, $slug)) {
+                    $applied++;
+                }
+            }
+            $results[] = ['type' => 'categories', 'status' => 'applied', 'count' => $applied];
+        }
+
         // Beden tabloları (ürüne bağlamadan) — Loobek ts_size_chart olarak oluştur/güncelle
         if (isset($body['sizeCharts']) && is_array($body['sizeCharts'])) {
             $applied = 0;
