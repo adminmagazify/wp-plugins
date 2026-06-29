@@ -111,6 +111,34 @@ class WPD_Product_Sync {
     }
 
     /**
+     * Tam senkron: merkezden gelen ID listesinde OLMAYAN, merkez kaynaklı
+     * (_wpd_central_chart_id'li) ts_size_chart post'larını siler. Panel'de silinen
+     * beden tablosu "Sitelere Gönder" sonrası sitede de kalkar.
+     */
+    public static function prune_size_charts($keepCentralIds) {
+        if (!post_type_exists('ts_size_chart')) {
+            return 0;
+        }
+        $keep = array_map('intval', (array) $keepCentralIds);
+        $posts = get_posts([
+            'post_type'   => 'ts_size_chart',
+            'numberposts' => -1,
+            'post_status' => 'any',
+            'fields'      => 'ids',
+            'meta_key'    => '_wpd_central_chart_id',
+        ]);
+        $deleted = 0;
+        foreach ($posts as $pid) {
+            $cid = intval(get_post_meta($pid, '_wpd_central_chart_id', true));
+            if ($cid && !in_array($cid, $keep, true)) {
+                wp_delete_post($pid, true);
+                $deleted++;
+            }
+        }
+        return $deleted;
+    }
+
+    /**
      * Merkez beden tablosunu Loobek 'ts_size_chart' post'u olarak oluşturur/günceller.
      * Idempotent: _wpd_central_chart_id meta'sı ile eşler, tekrar gönderimde çoğaltmaz.
      */

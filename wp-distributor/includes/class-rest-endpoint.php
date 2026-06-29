@@ -69,12 +69,18 @@ class WPD_Rest_Endpoint {
         // Beden tabloları (ürüne bağlamadan) — Loobek ts_size_chart olarak oluştur/güncelle
         if (isset($body['sizeCharts']) && is_array($body['sizeCharts'])) {
             $applied = 0;
+            $sentIds = [];
             foreach ($body['sizeCharts'] as $chart) {
+                if (isset($chart['id'])) {
+                    $sentIds[] = intval($chart['id']);
+                }
                 if (WPD_Product_Sync::upsert_size_chart_post($chart)) {
                     $applied++;
                 }
             }
-            $results[] = ['type' => 'sizeCharts', 'status' => 'applied', 'count' => $applied];
+            // Tam senkron: merkezde artık olmayan (silinen) beden tablolarını sitede de sil
+            $deleted = WPD_Product_Sync::prune_size_charts($sentIds);
+            $results[] = ['type' => 'sizeCharts', 'status' => 'applied', 'count' => $applied, 'deleted' => $deleted];
         }
 
         // Gönderim bölgeleri (shipping zones) — WooCommerce'de oluştur/güncelle
