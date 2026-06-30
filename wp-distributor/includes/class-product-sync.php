@@ -583,17 +583,42 @@ class WPD_Product_Sync {
         $product->set_attributes(array_values(array_merge(array_values($others), [$brand_attr])));
     }
 
-    public static function ensure_category($name, $slug) {
+    public static function ensure_category($name, $slug, $image = '') {
         $slug = sanitize_title($slug ? $slug : $name);
         $term = get_term_by('slug', $slug, 'product_cat');
         if ($term) {
-            return $term->term_id;
+            $term_id = (int) $term->term_id;
+        } else {
+            $created = wp_insert_term(sanitize_text_field($name), 'product_cat', ['slug' => $slug]);
+            if (is_wp_error($created)) {
+                $term = get_term_by('slug', $slug, 'product_cat');
+                $term_id = $term ? (int) $term->term_id : 0;
+            } else {
+                $term_id = (int) $created['term_id'];
+            }
         }
-        $created = wp_insert_term(sanitize_text_field($name), 'product_cat', ['slug' => $slug]);
-        if (is_wp_error($created)) {
-            return 0;
+        // Kategori görseli — WooCommerce product_cat thumbnail'ı
+        if ($term_id && $image) {
+            self::ensure_category_thumbnail($term_id, $image);
         }
-        return $created['term_id'];
+        return $term_id;
+    }
+
+    /** Kategori görselini indirip product_cat term'ine thumbnail olarak atar (idempotent). */
+    protected static function ensure_category_thumbnail($term_id, $image_url) {
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        // Aynı görsel zaten yüklendiyse tekrar indirme
+        if (get_term_meta($term_id, '_wpd_cat_image_src', true) === $image_url) {
+            return;
+        }
+        $att_id = self::sideload($image_url, 0);
+        if ($att_id) {
+            update_term_meta($term_id, 'thumbnail_id', $att_id);
+            update_term_meta($term_id, '_wpd_cat_image_src', $image_url);
+        }
     }
 
     protected static function sync_images($product_id, $item) {

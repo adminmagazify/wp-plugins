@@ -57,9 +57,10 @@ class WPD_Rest_Endpoint {
         if (isset($body['categories']) && is_array($body['categories'])) {
             $applied = 0;
             foreach ($body['categories'] as $cat) {
-                $name = isset($cat['name']) ? $cat['name'] : '';
-                $slug = isset($cat['slug']) ? $cat['slug'] : '';
-                if ($name && WPD_Product_Sync::ensure_category($name, $slug)) {
+                $name  = isset($cat['name']) ? $cat['name'] : '';
+                $slug  = isset($cat['slug']) ? $cat['slug'] : '';
+                $image = isset($cat['image']) ? $cat['image'] : '';
+                if ($name && WPD_Product_Sync::ensure_category($name, $slug, $image)) {
                     $applied++;
                 }
             }
