@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Distributor
  * Description: Merkez panelden ürünleri otomatik alır ve WooCommerce'e aktarır. Site sahibi hangi kategorilerde ürün satacağını seçer.
- * Version: 1.2.8
+ * Version: 1.2.9
  * Author: WP Central
  * Requires Plugins: woocommerce
  */
@@ -20,7 +20,7 @@ if (!defined('WPD_CENTRAL_URL')) {
     define('WPD_CENTRAL_URL', 'https://api-production-76ce.up.railway.app');
 }
 
-define('WPD_VERSION', '1.2.8');
+define('WPD_VERSION', '1.2.9');
 define('WPD_PATH', plugin_dir_path(__FILE__));
 
 require_once WPD_PATH . 'includes/class-api-client.php';
@@ -35,6 +35,26 @@ require_once WPD_PATH . 'includes/class-orders.php';
 
 // GitHub release tabanlı otomatik güncelleme
 WPD_Updater::init(__FILE__);
+
+// Dış URL'li görseller: attachment'lar dosya indirmeden dış URL'e (feed görseli) işaret eder.
+// Bu filtreler WooCommerce/tema görsel URL'i isterken saklı dış URL'i döndürür → indirme/depolama yok.
+add_filter('wp_get_attachment_url', function ($url, $post_id) {
+    $ext = get_post_meta($post_id, '_wpd_ext_url', true);
+    return $ext ? $ext : $url;
+}, 10, 2);
+
+add_filter('wp_get_attachment_image_src', function ($image, $attachment_id, $size) {
+    $ext = get_post_meta($attachment_id, '_wpd_ext_url', true);
+    if ($ext) {
+        return [$ext, 0, 0, false];
+    }
+    return $image;
+}, 10, 3);
+
+// Dış görsellerde yerel boyut yok → srcset üretme (kırık srcset olmasın)
+add_filter('wp_calculate_image_srcset', function ($sources, $size_array, $image_src, $image_meta, $attachment_id) {
+    return get_post_meta($attachment_id, '_wpd_ext_url', true) ? [] : $sources;
+}, 10, 5);
 
 // Çift yönlü stok: sitede satış/iade olunca merkeze bildir (tek ortak havuz)
 add_action('woocommerce_reduce_order_stock', ['WPD_Stock', 'on_reduce'], 20, 1);

@@ -652,23 +652,43 @@ class WPD_Product_Sync {
         }
     }
 
+    /**
+     * Görseli İNDİRMEDEN, dış URL'e işaret eden hafif bir attachment oluşturur.
+     * (Eski davranış: download_url + media_handle_sideload — 34 bin üründe çok yavaştı.)
+     * Front-end'de wp-distributor.php'deki filtreler bu attachment için dış URL'i döndürür.
+     */
     protected static function sideload($url, $product_id) {
-        $tmp = download_url($url, 20);
-        if (is_wp_error($tmp)) {
+        $url = esc_url_raw($url);
+        if (!$url) {
             return 0;
         }
-        $name = basename(wp_parse_url($url, PHP_URL_PATH));
-        if (!$name) {
-            $name = 'image-' . time() . '.jpg';
+
+        $filename = basename(wp_parse_url($url, PHP_URL_PATH));
+        if (!$filename) {
+            $filename = 'image.jpg';
         }
-        $file = ['name' => $name, 'tmp_name' => $tmp];
-        $att_id = media_handle_sideload($file, $product_id);
-        if (is_wp_error($att_id)) {
-            if (file_exists($tmp)) {
-                @unlink($tmp);
-            }
+        $filetype = wp_check_filetype($filename);
+        $mime = $filetype['type'] ? $filetype['type'] : 'image/jpeg';
+
+        $att_id = wp_insert_attachment([
+            'guid'           => $url,
+            'post_mime_type' => $mime,
+            'post_title'     => sanitize_file_name(pathinfo($filename, PATHINFO_FILENAME)),
+            'post_content'   => '',
+            'post_status'    => 'inherit',
+        ], false, $product_id, true);
+
+        if (is_wp_error($att_id) || !$att_id) {
             return 0;
         }
-        return $att_id;
+
+        // Dosya yolu yerine tam dış URL sakla; filtreler bunu URL olarak döndürür.
+        update_post_meta($att_id, '_wp_attached_file', $url);
+        update_post_meta($att_id, '_wpd_ext_url', $url);
+        update_post_meta($att_id, '_wp_attachment_metadata', [
+            'width' => 0, 'height' => 0, 'file' => $url, 'sizes' => [],
+        ]);
+
+        return (int) $att_id;
     }
 }
