@@ -622,34 +622,52 @@ class WPD_Product_Sync {
     }
 
     protected static function sync_images($product_id, $item) {
-        require_once ABSPATH . 'wp-admin/includes/media.php';
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        require_once ABSPATH . 'wp-admin/includes/image.php';
+        // ATTACHMENT OLUŞTURMA — dış görsel URL'lerini ürün meta'sına yaz.
+        // Front-end'de wp-distributor.php'deki filtreler bu meta'lardan görseli çizer.
+        // (Eski 1.2.9: her görsel için hafif attachment kaydı → media kütüphanesi şişiyordu.)
+        $main = isset($item['mainImage']) ? esc_url_raw($item['mainImage']) : '';
+        $gallery = (isset($item['gallery']) && is_array($item['gallery']))
+            ? array_values(array_filter(array_map('esc_url_raw', $item['gallery'])))
+            : [];
 
-        $main_src = isset($item['mainImage']) ? $item['mainImage'] : '';
-        if ($main_src && get_post_meta($product_id, '_wpd_main_src', true) !== $main_src) {
-            $att_id = self::sideload($main_src, $product_id);
-            if ($att_id) {
-                set_post_thumbnail($product_id, $att_id);
-                update_post_meta($product_id, '_wpd_main_src', $main_src);
-            }
+        if ($main) {
+            update_post_meta($product_id, '_wpd_main_image_url', $main);
+        } else {
+            delete_post_meta($product_id, '_wpd_main_image_url');
+        }
+        if ($gallery) {
+            update_post_meta($product_id, '_wpd_gallery_urls', $gallery);
+        } else {
+            delete_post_meta($product_id, '_wpd_gallery_urls');
         }
 
-        $gallery = (isset($item['gallery']) && is_array($item['gallery'])) ? $item['gallery'] : [];
-        $gallery_key = md5(implode('|', $gallery));
-        if (!empty($gallery) && get_post_meta($product_id, '_wpd_gallery_key', true) !== $gallery_key) {
-            $att_ids = [];
-            foreach ($gallery as $src) {
-                $id = self::sideload($src, $product_id);
-                if ($id) {
-                    $att_ids[] = $id;
-                }
-            }
-            if ($att_ids) {
-                update_post_meta($product_id, '_product_image_gallery', implode(',', $att_ids));
-                update_post_meta($product_id, '_wpd_gallery_key', $gallery_key);
+        // Bu üründen kalan eski attachment-tabanlı görselleri (1.2.9) temizle
+        self::cleanup_old_image_attachments($product_id);
+    }
+
+    /**
+     * Ürüne bağlı eski _wpd_ext_url pointer attachment'larını ve WooCommerce görsel
+     * meta'larını siler (attachment'sız yeni yönteme geçişte media kütüphanesini temizler).
+     */
+    protected static function cleanup_old_image_attachments($product_id) {
+        $ids = [];
+        $thumb = get_post_meta($product_id, '_thumbnail_id', true);
+        if ($thumb) $ids[] = (int) $thumb;
+        $gal = get_post_meta($product_id, '_product_image_gallery', true);
+        if ($gal) {
+            foreach (explode(',', $gal) as $g) {
+                if ($g !== '') $ids[] = (int) $g;
             }
         }
+        foreach (array_unique($ids) as $aid) {
+            if ($aid && get_post_meta($aid, '_wpd_ext_url', true)) {
+                wp_delete_post($aid, true); // sadece bizim dış-URL pointer'ımızı sil
+            }
+        }
+        delete_post_meta($product_id, '_thumbnail_id');
+        delete_post_meta($product_id, '_product_image_gallery');
+        delete_post_meta($product_id, '_wpd_main_src');
+        delete_post_meta($product_id, '_wpd_gallery_key');
     }
 
     /**

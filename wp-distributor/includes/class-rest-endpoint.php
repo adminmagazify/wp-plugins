@@ -40,6 +40,28 @@ class WPD_Rest_Endpoint {
         $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
         $results      = [];
 
+        // Media temizliği: eski dış-URL pointer attachment'larını (1.2.9) batch batch sil.
+        // 119 bin kayıt tek istekte silinemez → merkez, remaining>0 olduğu sürece tekrar çağırır.
+        if (!empty($body['purgeMedia'])) {
+            $limit = isset($body['purgeMediaLimit']) ? max(1, intval($body['purgeMediaLimit'])) : 400;
+            $q = new WP_Query([
+                'post_type'      => 'attachment',
+                'post_status'    => 'inherit',
+                'posts_per_page' => $limit,
+                'fields'         => 'ids',
+                'meta_key'       => '_wpd_ext_url',
+            ]);
+            $deleted = 0;
+            foreach ($q->posts as $aid) {
+                wp_delete_post($aid, true);
+                $deleted++;
+            }
+            $remaining = max(0, (int) $q->found_posts - $deleted);
+            return rest_ensure_response(['results' => [[
+                'type' => 'purgeMedia', 'status' => 'done', 'deleted' => $deleted, 'remaining' => $remaining,
+            ]]]);
+        }
+
         // Markalar (ürüne bağlamadan) — WooCommerce product_brand term'leri olarak oluştur
         if (isset($body['brands']) && is_array($body['brands'])) {
             $applied = 0;

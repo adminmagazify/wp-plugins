@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Distributor
  * Description: Merkez panelden ürünleri otomatik alır ve WooCommerce'e aktarır. Site sahibi hangi kategorilerde ürün satacağını seçer.
- * Version: 1.2.9
+ * Version: 1.3.0
  * Author: WP Central
  * Requires Plugins: woocommerce
  */
@@ -20,7 +20,7 @@ if (!defined('WPD_CENTRAL_URL')) {
     define('WPD_CENTRAL_URL', 'https://api-production-76ce.up.railway.app');
 }
 
-define('WPD_VERSION', '1.2.9');
+define('WPD_VERSION', '1.3.0');
 define('WPD_PATH', plugin_dir_path(__FILE__));
 
 require_once WPD_PATH . 'includes/class-api-client.php';
@@ -55,6 +55,88 @@ add_filter('wp_get_attachment_image_src', function ($image, $attachment_id, $siz
 add_filter('wp_calculate_image_srcset', function ($sources, $size_array, $image_src, $image_meta, $attachment_id) {
     return get_post_meta($attachment_id, '_wpd_ext_url', true) ? [] : $sources;
 }, 10, 5);
+
+/* =========================================================================
+   ATTACHMENT'SIZ DIŞ GÖRSEL (v1.3.0)
+   Ürün görselleri artık media kütüphanesine kayıt açmadan, doğrudan ürün
+   meta'sındaki dış URL'den (_wpd_main_image_url / _wpd_gallery_urls) çizilir.
+   ========================================================================= */
+
+// Ürünün ana dış görsel URL'i (yoksa boş)
+function wpd_main_image_url($product_id) {
+    return get_post_meta($product_id, '_wpd_main_image_url', true);
+}
+
+// Mağaza listesi, sepet, widget, ilgili ürünler → WC_Product::get_image()
+add_filter('woocommerce_product_get_image', function ($html, $product) {
+    $url = wpd_main_image_url($product->get_id());
+    if (!$url) return $html;
+    return '<img src="' . esc_url($url) . '" alt="' . esc_attr($product->get_name())
+        . '" class="wpd-ext-img" loading="lazy" decoding="async" />';
+}, 10, 2);
+
+// Temaların öne çıkan görsel (get_the_post_thumbnail) kullanımı
+add_filter('post_thumbnail_html', function ($html, $post_id) {
+    if (!empty($html)) return $html;
+    $url = get_post_meta($post_id, '_wpd_main_image_url', true);
+    if (!$url) return $html;
+    return '<img src="' . esc_url($url) . '" class="wp-post-image wpd-ext-img" loading="lazy" decoding="async" />';
+}, 10, 2);
+
+// has_post_thumbnail true olsun (yoksa tema placeholder gösterir)
+add_filter('has_post_thumbnail', function ($has, $post) {
+    if ($has) return $has;
+    $pid = is_object($post) ? $post->ID : (int) $post;
+    if ($pid && get_post_meta($pid, '_wpd_main_image_url', true)) return true;
+    return $has;
+}, 10, 2);
+
+// Tekil ürün sayfası galerisi: WooCommerce'in attachment tabanlı galerisini,
+// dış URL'lerden çizen kendi galerimizle değiştir (dış görselli ürünlerde).
+add_action('init', function () {
+    remove_action('woocommerce_before_single_product_summary', 'woocommerce_show_product_images', 20);
+    add_action('woocommerce_before_single_product_summary', 'wpd_external_product_gallery', 20);
+});
+
+function wpd_external_product_gallery() {
+    global $product;
+    if (!$product) return;
+    $main = wpd_main_image_url($product->get_id());
+    if (!$main) {
+        // Bu ürün dış görselli değil → WooCommerce'in normal galerisini göster
+        if (function_exists('woocommerce_show_product_images')) {
+            woocommerce_show_product_images();
+        }
+        return;
+    }
+    $gallery = get_post_meta($product->get_id(), '_wpd_gallery_urls', true);
+    $gallery = is_array($gallery) ? $gallery : [];
+    $all = array_merge([$main], $gallery);
+    ?>
+    <div class="wpd-gallery">
+        <div class="wpd-gallery-main">
+            <img id="wpd-gallery-main-img" src="<?php echo esc_url($main); ?>"
+                 alt="<?php echo esc_attr($product->get_name()); ?>" />
+        </div>
+        <?php if (count($all) > 1) : ?>
+            <div class="wpd-gallery-thumbs">
+                <?php foreach ($all as $i => $u) : ?>
+                    <img src="<?php echo esc_url($u); ?>"
+                         class="wpd-gallery-thumb<?php echo $i === 0 ? ' active' : ''; ?>"
+                         onclick="var m=document.getElementById('wpd-gallery-main-img'); if(m){m.src=this.src;} var ts=this.parentNode.querySelectorAll('.wpd-gallery-thumb'); for(var k=0;k<ts.length;k++){ts[k].classList.remove('active');} this.classList.add('active');" />
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+    <style>
+        .wpd-gallery{width:100%}
+        .wpd-gallery-main img{width:100%;height:auto;border:1px solid #eee;border-radius:8px;object-fit:contain;background:#fff}
+        .wpd-gallery-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+        .wpd-gallery-thumb{width:64px;height:64px;object-fit:cover;border:2px solid #eee;border-radius:6px;cursor:pointer;background:#fff}
+        .wpd-gallery-thumb.active{border-color:#2a7ae4}
+    </style>
+    <?php
+}
 
 // Çift yönlü stok: sitede satış/iade olunca merkeze bildir (tek ortak havuz)
 add_action('woocommerce_reduce_order_stock', ['WPD_Stock', 'on_reduce'], 20, 1);
