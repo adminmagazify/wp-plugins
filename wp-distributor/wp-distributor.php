@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Distributor
  * Description: Merkez panelden ürünleri otomatik alır ve WooCommerce'e aktarır. Site sahibi hangi kategorilerde ürün satacağını seçer.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: WP Central
  * Requires Plugins: woocommerce
  */
@@ -20,7 +20,7 @@ if (!defined('WPD_CENTRAL_URL')) {
     define('WPD_CENTRAL_URL', 'https://api-production-76ce.up.railway.app');
 }
 
-define('WPD_VERSION', '1.3.0');
+define('WPD_VERSION', '1.3.1');
 define('WPD_PATH', plugin_dir_path(__FILE__));
 
 require_once WPD_PATH . 'includes/class-api-client.php';
@@ -90,6 +90,35 @@ add_filter('has_post_thumbnail', function ($has, $post) {
     if ($pid && get_post_meta($pid, '_wpd_main_image_url', true)) return true;
     return $has;
 }, 10, 2);
+
+/* ---- Attachment'sız dış görseli "GERÇEK öne çıkan görsel" gibi sun (v1.3.1) ----
+   loobek gibi temalar liste/arşiv thumbnail'ını WordPress öne çıkan görsel sistemiyle
+   çizer: get_the_post_thumbnail(_url), CSS background veya admin-ajax. Bunlar attachment/
+   thumbnail_id ister; attachment'sız yapıda bu yoktu → boş görsel → spinner'da takılma.
+   Çözüm: dış görselli üründe _thumbnail_id olarak ürünün KENDİ id'sini "sentinel" ver ve
+   o sahte attachment'ın URL/src çözümünü dış URL'e yönlendir. Böylece tema hangi standart
+   yolu kullanırsa kullansın (img, url, background, ajax) liste görselleri de gelir. */
+add_filter('get_post_metadata', function ($value, $object_id, $meta_key, $single) {
+    if ($meta_key !== '_thumbnail_id') return $value;
+    if (is_admin() && !wp_doing_ajax()) return $value;   // gerçek wp-admin ekranını bozma
+    if ($value !== null) return $value;                  // gerçek thumbnail zaten çözülmüş
+    if (get_post_meta($object_id, '_wpd_main_image_url', true)) {
+        return $single ? (string) $object_id : [(string) $object_id];
+    }
+    return $value;
+}, 10, 4);
+
+// Sentinel "attachment" (aslında ürün) için görsel kaynağı → dış URL (800x800 varsay).
+add_filter('wp_get_attachment_image_src', function ($image, $attachment_id, $size, $icon) {
+    $u = get_post_meta($attachment_id, '_wpd_main_image_url', true);
+    if ($u) return [$u, 800, 800, false];
+    return $image;
+}, 10, 4);
+
+add_filter('wp_get_attachment_url', function ($url, $attachment_id) {
+    $u = get_post_meta($attachment_id, '_wpd_main_image_url', true);
+    return $u ?: $url;
+}, 9, 2);
 
 // Tekil ürün sayfası galerisi: WooCommerce'in attachment tabanlı galerisini,
 // dış URL'lerden çizen kendi galerimizle değiştir (dış görselli ürünlerde).
