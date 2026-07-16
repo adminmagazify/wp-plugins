@@ -47,23 +47,48 @@ class WPD_Content {
         }
     }
 
-    /** [wpd_banner position="..."] — banner görselleri. */
+    /**
+     * [wpd_banner position="..."] — o konumdaki içerikler: görsel banner VE metin duyurusu.
+     * Konum verilirse yalnız o konumdakiler; verilmezse "top" (otomatik üst çubuk) hariç hepsi.
+     */
     public static function banner_shortcode($atts) {
         $pos  = isset($atts['position']) ? $atts['position'] : '';
         $html = '';
-        foreach (self::active_items('banner') as $it) {
-            if ($pos && (isset($it['position']) ? $it['position'] : '') !== $pos) continue;
-            $img = !empty($it['imageUrl']) ? esc_url($it['imageUrl']) : '';
-            if (!$img) continue;
+        foreach (self::active_items() as $it) {
+            $ipos = isset($it['position']) ? $it['position'] : 'top';
+            if ($pos !== '') {
+                if ($ipos !== $pos) continue;
+            } elseif ($ipos === 'top') {
+                continue; // konum belirtilmedi → üst çubuk zaten otomatik geliyor, çift basma
+            }
+
+            $type = isset($it['type']) ? $it['type'] : 'announcement';
             $link = !empty($it['linkUrl']) ? esc_url($it['linkUrl']) : '';
-            $alt  = esc_attr(isset($it['title']) ? $it['title'] : '');
-            $img_tag = '<img src="' . $img . '" alt="' . $alt . '" class="wpd-banner-img" style="max-width:100%;height:auto;display:block" />';
-            $html .= '<div class="wpd-banner">' . ($link ? '<a href="' . $link . '">' . $img_tag . '</a>' : $img_tag) . '</div>';
+
+            if ($type === 'banner') {
+                $img = !empty($it['imageUrl']) ? esc_url($it['imageUrl']) : '';
+                if (!$img) continue;
+                $alt = esc_attr(isset($it['title']) ? $it['title'] : '');
+                $img_tag = '<img src="' . $img . '" alt="' . $alt . '" class="wpd-banner-img" style="max-width:100%;height:auto;display:block" />';
+                $html .= '<div class="wpd-banner">' . ($link ? '<a href="' . $link . '">' . $img_tag . '</a>' : $img_tag) . '</div>';
+            } else {
+                $text = esc_html(isset($it['text']) ? $it['text'] : '');
+                if ($text === '') continue;
+                $bg    = !empty($it['bgColor']) ? esc_attr($it['bgColor']) : '#111827';
+                $title = !empty($it['title']) ? '<strong class="wpd-announce-title">' . esc_html($it['title']) . '</strong>' : '';
+                $body  = $link ? '<a href="' . $link . '" style="color:inherit;text-decoration:underline">' . $text . '</a>' : $text;
+                $html .= '<div class="wpd-announce-block" style="background:' . $bg . '">' . $title . $body . '</div>';
+            }
         }
         return $html;
     }
 
     public static function styles() {
-        echo '<style>.wpd-announce-bar{color:#fff;text-align:center;padding:8px 16px;font-size:14px;font-weight:500;line-height:1.4}.wpd-banner{margin:12px 0}</style>';
+        echo '<style>'
+            . '.wpd-announce-bar{color:#fff;text-align:center;padding:8px 16px;font-size:14px;font-weight:500;line-height:1.4}'
+            . '.wpd-banner{margin:12px 0}'
+            . '.wpd-announce-block{color:#fff;text-align:center;padding:16px 20px;border-radius:10px;font-size:16px;font-weight:600;line-height:1.5;margin:12px 0}'
+            . '.wpd-announce-title{display:block;font-size:1.15em;margin-bottom:4px}'
+            . '</style>';
     }
 }
