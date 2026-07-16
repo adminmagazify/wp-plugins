@@ -118,24 +118,30 @@ class WPD_Updater {
         return $transient;
     }
 
-    /** "Ayrıntıları gör" popup'ı için bilgi sağlar. */
+    /** "Ayrıntıları gör" popup'ı için bilgi sağlar (merkez API erişilemese bile kurulu dosyadan doldurur). */
     public static function plugin_info($result, $action, $args) {
         if ($action !== 'plugin_information' || empty($args->slug) || $args->slug !== self::$plugin_slug) {
             return $result;
         }
-        $latest = self::get_latest_release();
-        if (!$latest) {
-            return $result;
-        }
+        // Kurulu plugin başlığından bilgi (API çekilemese bile "Plugin not found" olmasın)
+        $header = ['Version' => 'Version', 'Name' => 'Plugin Name', 'Description' => 'Description', 'Author' => 'Author'];
+        $data = @get_file_data(WP_PLUGIN_DIR . '/' . self::$plugin_file, $header);
+
+        $latest    = self::get_latest_release();
+        $version   = ($latest && !empty($latest['version'])) ? $latest['version'] : (!empty($data['Version']) ? $data['Version'] : '1.0.0');
+        $download  = ($latest && !empty($latest['download'])) ? $latest['download'] : '';
+        $changelog = ($latest && !empty($latest['changelog'])) ? nl2br(esc_html($latest['changelog'])) : 'Değişiklik notu bulunmuyor.';
+
         return (object) [
-            'name'          => 'WP Distributor',
+            'name'          => !empty($data['Name']) ? $data['Name'] : 'WP Distributor',
             'slug'          => self::$plugin_slug,
-            'version'       => $latest['version'],
-            'author'        => 'WP Central',
+            'version'       => $version,
+            'author'        => !empty($data['Author']) ? $data['Author'] : 'WP Central',
             'homepage'      => 'https://github.com/' . self::GITHUB_REPO,
-            'download_link' => $latest['download'],
+            'download_link' => $download,
             'sections'      => [
-                'changelog' => $latest['changelog'] !== '' ? nl2br(esc_html($latest['changelog'])) : 'Değişiklik notu yok.',
+                'description' => !empty($data['Description']) ? $data['Description'] : 'Merkez panelden ürünleri otomatik alır ve WooCommerce\'e aktarır.',
+                'changelog'   => $changelog,
             ],
         ];
     }
