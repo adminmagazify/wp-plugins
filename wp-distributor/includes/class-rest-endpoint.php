@@ -148,6 +148,18 @@ class WPD_Rest_Endpoint {
             }
         }
 
+        // Kampanyalar (indirim) — eşleşen ürünlere sale_price + tarih uygula; REPLACE (öncekini temizle)
+        if (isset($body['campaigns']) && is_array($body['campaigns'])) {
+            $cr = WPD_Campaign::apply($body['campaigns']);
+            $results[] = ['type' => 'campaigns', 'status' => 'applied', 'count' => count($body['campaigns']), 'affected' => $cr['affected'], 'cleared' => $cr['cleared']];
+        }
+
+        // Site içeriği (duyuru/banner) — option olarak sakla (tema/shortcode gösterir)
+        if (isset($body['contents']) && is_array($body['contents'])) {
+            update_option('wpd_site_contents', array_values($body['contents']));
+            $results[] = ['type' => 'contents', 'status' => 'applied', 'count' => count($body['contents'])];
+        }
+
         // LiteSpeed Cache: ürün/fiyat/kategori değişti → mağaza & arşiv sayfalarını tazele
         // (push toplu çalışır; tek seferde tüm cache'i geçersiz kılmak en güvenlisi)
         if (!empty($results)) {
