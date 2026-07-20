@@ -11,16 +11,20 @@ if (!defined('ABSPATH')) {
 class WPD_Orders {
 
     public static function on_status($order_id, $old_status, $new_status, $order = null) {
-        // Ödeme onaylı (processing/completed) + havale/EFT (on-hold) siparişleri raporla
-        if (!in_array($new_status, ['processing', 'completed', 'on-hold'], true)) {
+        // Gelir sayılan durumlar (processing/completed/on-hold) + İPTAL/İADE/BAŞARISIZ.
+        // İptal bildirilmezse merkez siparişi hâlâ ciroya ve bayi hakedişine sayar.
+        $reportable = ['processing', 'completed', 'on-hold', 'cancelled', 'refunded', 'failed'];
+        if (!in_array($new_status, $reportable, true)) {
             return;
         }
         if (!($order instanceof WC_Order)) {
             $order = wc_get_order($order_id);
         }
-        if (!$order || $order->get_meta('_wpd_order_reported')) {
-            return; // yok ya da zaten raporlandı
+        if (!$order) {
+            return;
         }
+        // NOT: "yalnızca bir kez raporla" kısıtı KALDIRILDI — durum değişimleri (iptal/iade dahil)
+        // merkeze yansımalı. Merkez externalId ile upsert ettiği için tekrar göndermek güvenli.
 
         $items = [];
         foreach ($order->get_items() as $line) {
