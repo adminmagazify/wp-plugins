@@ -81,6 +81,48 @@ class WPD_Rest_Endpoint {
             ]]]);
         }
 
+        // UZAKTAN EKLENTİ GÜNCELLEME (merkez panel → "Eklentiyi Güncelle").
+        // 1000 sitede tek tek wp-admin'e girmeden güncelleme yapmak için.
+        if (!empty($body['updatePlugin'])) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/misc.php';
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+            // Hedef eklenti: varsayılan kendisi (wp-distributor)
+            $target = isset($body['plugin']) ? ltrim((string) $body['plugin'], '/') : plugin_basename(WPD_PATH . 'wp-distributor.php');
+            $before = function_exists('get_file_data')
+                ? (string) get_file_data(WP_PLUGIN_DIR . '/' . $target, ['Version' => 'Version'])['Version']
+                : WPD_VERSION;
+
+            // Güncelleme bilgisini tazele (cache yüzünden "güncelleme yok" demesin)
+            if (class_exists('WPD_Updater')) { WPD_Updater::clear_cache(); }
+            wp_clean_plugins_cache(true);
+            delete_site_transient('update_plugins');
+            wp_update_plugins();
+
+            $skin     = new Automatic_Upgrader_Skin();
+            $upgrader = new Plugin_Upgrader($skin);
+            $ok       = $upgrader->upgrade($target);
+
+            clearstatcache();
+            $after = (string) get_file_data(WP_PLUGIN_DIR . '/' . $target, ['Version' => 'Version'])['Version'];
+
+            // Güncelleme sonrası eklenti pasife düşmüşse tekrar etkinleştir
+            if (!is_plugin_active($target)) { activate_plugin($target); }
+
+            $status = is_wp_error($ok) ? 'error' : (($after !== $before) ? 'updated' : 'nochange');
+            return rest_ensure_response(['results' => [[
+                'type'     => 'updatePlugin',
+                'status'   => $status,
+                'plugin'   => $target,
+                'before'   => $before,
+                'after'    => $after,
+                'error'    => is_wp_error($ok) ? $ok->get_error_message() : null,
+                'messages' => array_slice((array) $skin->get_upgrade_messages(), -6),
+            ]]]);
+        }
+
         // Markalar (ürüne bağlamadan) — WooCommerce product_brand term'leri olarak oluştur
         if (isset($body['brands']) && is_array($body['brands'])) {
             $applied = 0;
