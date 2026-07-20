@@ -62,6 +62,25 @@ class WPD_Rest_Endpoint {
             ]]]);
         }
 
+        // Uzaktan CACHE TEMİZLEME (merkez panel → "Cache Temizle").
+        // Site tarafındaki tüm katmanları boşaltır + eklenti sürüm önbelleğini tazeler
+        // (sürüm/güncelleme "takılı kaldı" sorununu da çözer).
+        if (!empty($body['purgeCache'])) {
+            $cleared = [];
+            if (function_exists('wc_delete_product_transients')) { wc_delete_product_transients(); $cleared[] = 'wc-transients'; }
+            if (function_exists('wp_cache_flush')) { wp_cache_flush(); $cleared[] = 'object-cache'; }
+            do_action('litespeed_purge_all'); $cleared[] = 'litespeed';
+            if (function_exists('rocket_clean_domain')) { rocket_clean_domain(); $cleared[] = 'wp-rocket'; }
+            if (function_exists('w3tc_flush_all')) { w3tc_flush_all(); $cleared[] = 'w3tc'; }
+            // Eklenti sürüm/güncelleme önbelleği
+            if (function_exists('wp_clean_plugins_cache')) { wp_clean_plugins_cache(true); $cleared[] = 'plugin-cache'; }
+            delete_site_transient('update_plugins'); $cleared[] = 'update-transient';
+            if (class_exists('WPD_Updater')) { WPD_Updater::clear_cache(); $cleared[] = 'wpd-update-cache'; }
+            return rest_ensure_response(['results' => [[
+                'type' => 'purgeCache', 'status' => 'done', 'cleared' => $cleared,
+            ]]]);
+        }
+
         // Markalar (ürüne bağlamadan) — WooCommerce product_brand term'leri olarak oluştur
         if (isset($body['brands']) && is_array($body['brands'])) {
             $applied = 0;
