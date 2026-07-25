@@ -37,6 +37,8 @@ class WPD_Rest_Endpoint {
         $body         = $request->get_json_params();
         $products     = isset($body['products']) && is_array($body['products']) ? $body['products'] : [];
         $deletes      = isset($body['deletes']) && is_array($body['deletes']) ? $body['deletes'] : [];
+        $drafts       = isset($body['drafts']) && is_array($body['drafts']) ? $body['drafts'] : [];       // pasifleştir → taslağa çek
+        $undrafts     = isset($body['undrafts']) && is_array($body['undrafts']) ? $body['undrafts'] : []; // geri aktif → yeniden yayınla
         $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
         $results      = [];
 
@@ -209,6 +211,28 @@ class WPD_Rest_Endpoint {
             }
         }
 
+        // Merkezde pasifleştirilen ürünleri SİLMEDEN taslağa çek (vitrinden kalkar, veri kalır)
+        foreach ($drafts as $draftId) {
+            $pid = intval($draftId);
+            try {
+                $st = WPD_Product_Sync::set_status_by_central_id($pid, 'draft');
+                $results[] = ['productId' => $pid, 'status' => $st];
+            } catch (Exception $e) {
+                $results[] = ['productId' => $pid, 'status' => 'error', 'error' => $e->getMessage()];
+            }
+        }
+
+        // Merkezde geri aktifleştirilen ürünleri yeniden yayınla
+        foreach ($undrafts as $undraftId) {
+            $pid = intval($undraftId);
+            try {
+                $st = WPD_Product_Sync::set_status_by_central_id($pid, 'publish');
+                $results[] = ['productId' => $pid, 'status' => $st];
+            } catch (Exception $e) {
+                $results[] = ['productId' => $pid, 'status' => 'error', 'error' => $e->getMessage()];
+            }
+        }
+
         // Kampanyalar (indirim) — eşleşen ürünlere sale_price + tarih uygula; REPLACE (öncekini temizle)
         if (isset($body['campaigns']) && is_array($body['campaigns'])) {
             $cr = WPD_Campaign::apply($body['campaigns']);
@@ -219,6 +243,12 @@ class WPD_Rest_Endpoint {
         if (isset($body['contents']) && is_array($body['contents'])) {
             update_option('wpd_site_contents', array_values($body['contents']));
             $results[] = ['type' => 'contents', 'status' => 'applied', 'count' => count($body['contents'])];
+        }
+
+        // Klon-kurulum: site kimliği — WP/WooCommerce/SMTP/logo/kullanıcı ayarlarını uygula
+        if (isset($body['siteIdentity']) && is_array($body['siteIdentity']) && class_exists('WPD_Setup')) {
+            $r = WPD_Setup::apply($body['siteIdentity']);
+            $results[] = ['type' => 'siteIdentity', 'status' => 'applied', 'done' => $r['done'], 'skipped' => $r['skipped']];
         }
 
         // LiteSpeed Cache: ürün/fiyat/kategori değişti → mağaza & arşiv sayfalarını tazele

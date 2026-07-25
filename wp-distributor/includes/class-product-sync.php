@@ -271,6 +271,29 @@ class WPD_Product_Sync {
     }
 
     /**
+     * Merkezde pasifleştirilen ürünü SİLMEDEN taslağa çeker (vitrinden kalkar, veri korunur).
+     * $status: 'draft' (gizle) veya 'publish' (geri yayınla). Ürün bu sitede yoksa sessizce atlar.
+     * Dönüş: 'drafted' | 'published' | 'nochange' | 'notfound'
+     */
+    public static function set_status_by_central_id($id, $status) {
+        $status = ($status === 'publish') ? 'publish' : 'draft';
+        $pid = self::find_by_central_id(intval($id));
+        if (!$pid) {
+            return 'notfound';
+        }
+        $product = wc_get_product($pid);
+        if (!$product) {
+            return 'notfound';
+        }
+        if ($product->get_status() === $status) {
+            return 'nochange';
+        }
+        $product->set_status($status);
+        $product->save();
+        return $status === 'publish' ? 'published' : 'drafted';
+    }
+
+    /**
      * Merkezden gelen stok güncellemesini uygular (ürünü yeniden OLUŞTURMAZ, sadece stok yazar).
      * Çift yönlü stok yayılımında kullanılır. set_stock_quantity sipariş hook'unu tetiklemez,
      * dolayısıyla geri-bildirim döngüsü oluşmaz.
