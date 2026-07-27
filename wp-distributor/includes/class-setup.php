@@ -294,6 +294,21 @@ class WPD_Setup {
         return is_string($s) && preg_match('#^https?://#', $s) && strpos($s, '/wp-content/uploads/') !== false;
     }
 
+    /** TEŞHİS: bir değer ağacında $needle'ın hangi key yolunda geçtiğini bulur (scanOption için). */
+    public static function find_paths($val, $needle, $path, &$out) {
+        if (is_string($val)) {
+            if (strpos($val, $needle) !== false) {
+                $out[] = ($path === '' ? '(kök)' : $path) . ' = ' . (strlen($val) > 140 ? substr($val, 0, 140) . '…' : $val);
+            }
+            return;
+        }
+        if (is_array($val)) {
+            foreach ($val as $k => $v) self::find_paths($v, $needle, $path . '[' . $k . ']', $out);
+        } elseif (is_object($val)) {
+            foreach (get_object_vars($val) as $k => $v) self::find_paths($v, $needle, $path . '->' . $k, $out);
+        }
+    }
+
     /**
      * [wpd_field key="site_title|tagline|contact_email|company_name|website|copyright"]
      * Yasal sayfalar ve footer bu shortcode'u kullanır → klonda hiç düzenlenmez, değer otomatik gelir.

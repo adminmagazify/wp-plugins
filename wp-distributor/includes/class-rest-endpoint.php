@@ -42,6 +42,26 @@ class WPD_Rest_Endpoint {
         $stockUpdates = isset($body['stockUpdates']) && is_array($body['stockUpdates']) ? $body['stockUpdates'] : [];
         $results      = [];
 
+        // TEŞHİS (salt-okunur): bir metnin (örn. footer logo dosya adı) HANGİ option'da/keyde
+        // saklandığını bulur — tema-özel alanların (footer logo, widget) yerini tespit için.
+        if (!empty($body['scanOption'])) {
+            global $wpdb;
+            $needle = is_string($body['scanOption']) ? $body['scanOption'] : '';
+            $matches = [];
+            if ($needle !== '') {
+                $names = $wpdb->get_col($wpdb->prepare(
+                    "SELECT option_name FROM {$wpdb->options} WHERE option_value LIKE %s LIMIT 40",
+                    '%' . $wpdb->esc_like($needle) . '%'
+                ));
+                foreach ((array) $names as $name) {
+                    $paths = [];
+                    if (class_exists('WPD_Setup')) WPD_Setup::find_paths(get_option($name), $needle, '', $paths);
+                    $matches[] = ['option' => $name, 'widget' => (strpos($name, 'widget_') === 0), 'paths' => $paths];
+                }
+            }
+            return rest_ensure_response(['results' => [['type' => 'scanOption', 'status' => 'done', 'needle' => $needle, 'matches' => $matches]]]);
+        }
+
         // Media temizliği: eski dış-URL pointer attachment'larını (1.2.9) batch batch sil.
         // 119 bin kayıt tek istekte silinemez → merkez, remaining>0 olduğu sürece tekrar çağırır.
         if (!empty($body['purgeMedia'])) {
