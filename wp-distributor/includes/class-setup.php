@@ -29,6 +29,9 @@ class WPD_Setup {
      * Dönüş: uygulanan/atlanan adımların özeti (REST results için).
      */
     public static function apply($id) {
+        // Görsel indirme + attachment üretimi zaman alabilir → süre sınırını yükselt (best-effort;
+        // paylaşımlı hostta yok sayılabilir ama çoğu yerde çalışır). timeout fatal'ı try/catch ile yakalanmaz.
+        if (function_exists('set_time_limit')) { @set_time_limit(120); }
         $done = [];
         $skipped = [];
 
@@ -166,13 +169,20 @@ class WPD_Setup {
         return is_wp_error($uid) ? 'error' : 'created';
     }
 
-    /** Klon temiz başlasın: tüm WooCommerce siparişlerini kalıcı siler (HPOS + legacy uyumlu). */
+    /**
+     * Klon temiz başlasın: WooCommerce siparişlerini kalıcı siler (HPOS + legacy uyumlu).
+     * PARTİ PARTİ (50'şer) + üst sınır (2000/push): limit=-1 ile tümünü tek seferde silmek
+     * bellek/timeout fatal'ı (500) yapardı. Daha fazlası varsa tekrar push ile devam edilir.
+     */
     private static function reset_orders() {
-        $ids = wc_get_orders(['limit' => -1, 'return' => 'ids', 'status' => 'any']);
         $n = 0;
-        foreach ($ids as $oid) {
-            $o = wc_get_order($oid);
-            if ($o) { $o->delete(true); $n++; }
+        for ($i = 0; $i < 40; $i++) { // 40 × 50 = en fazla 2000 sipariş / push
+            $ids = wc_get_orders(['limit' => 50, 'return' => 'ids', 'status' => 'any']);
+            if (empty($ids)) break;
+            foreach ($ids as $oid) {
+                $o = wc_get_order($oid);
+                if ($o) { $o->delete(true); $n++; }
+            }
         }
         return $n;
     }
@@ -189,7 +199,7 @@ class WPD_Setup {
         require_once ABSPATH . 'wp-admin/includes/media.php';
         require_once ABSPATH . 'wp-admin/includes/image.php';
 
-        $tmp = download_url($url);
+        $tmp = download_url($url, 20); // 20 sn timeout — hanging indirme max_execution_time'ı yemesin
         if (is_wp_error($tmp)) return 0;
         $name = basename(parse_url($url, PHP_URL_PATH));
         if ($name === '' || strpos($name, '.') === false) $name = 'logo-' . time() . '.png';
