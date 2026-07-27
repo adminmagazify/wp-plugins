@@ -72,23 +72,28 @@ class WPD_Api_Client {
      * init'te çağrılır; başarılı kayıt wpd_registered_domain'i günceller → mismatch biter, tekrar denemez.
      */
     public static function maybe_reregister_after_clone() {
-        $registered_domain = get_option('wpd_registered_domain', '');
-        $current = self::get_domain();
-        if (!$registered_domain || $registered_domain === $current) {
-            return; // klon değil ya da zaten kendi domainiyle kayıtlı
-        }
-        if (get_transient('wpd_reregister_lock')) {
-            return; // merkez ulaşılamıyorsa her istekte hammerlamayı önle (5 dk)
-        }
-        set_transient('wpd_reregister_lock', 1, 5 * MINUTE_IN_SECONDS);
+        // try/catch: init'te çalışır — herhangi bir hata OLURSA bile siteyi ASLA düşürmesin.
+        try {
+            $registered_domain = get_option('wpd_registered_domain', '');
+            $current = self::get_domain();
+            if (!$registered_domain || $registered_domain === $current) {
+                return; // klon değil ya da zaten kendi domainiyle kayıtlı
+            }
+            if (get_transient('wpd_reregister_lock')) {
+                return; // merkez ulaşılamıyorsa her istekte hammerlamayı önle (5 dk)
+            }
+            set_transient('wpd_reregister_lock', 1, 5 * MINUTE_IN_SECONDS);
 
-        // Master'dan devralınan kimliği temizle
-        delete_option('wpd_api_key');
-        delete_option('wpd_api_secret');
-        delete_option('wpd_registered');
+            // Master'dan devralınan kimliği temizle
+            delete_option('wpd_api_key');
+            delete_option('wpd_api_secret');
+            delete_option('wpd_registered');
 
-        // Kendi domaininle yeniden kaydol (başarılıysa wpd_registered_domain = current olur)
-        self::register_site();
+            // Kendi domaininle yeniden kaydol (başarılıysa wpd_registered_domain = current olur)
+            self::register_site();
+        } catch (\Throwable $e) {
+            // sessizce geç — klon hijyeni siteyi çökertmemeli
+        }
     }
 
     /** Merkezdeki tüm kategorileri getirir */

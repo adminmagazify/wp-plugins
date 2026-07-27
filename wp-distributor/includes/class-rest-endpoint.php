@@ -245,10 +245,16 @@ class WPD_Rest_Endpoint {
             $results[] = ['type' => 'contents', 'status' => 'applied', 'count' => count($body['contents'])];
         }
 
-        // Klon-kurulum: site kimliği — WP/WooCommerce/SMTP/logo/kullanıcı ayarlarını uygula
+        // Klon-kurulum: site kimliği — WP/WooCommerce/SMTP/logo/kullanıcı ayarlarını uygula.
+        // try/catch (\Throwable): apply() içinde bir fatal olsa bile REST isteği 500 vermesin;
+        // hata mesajı+konumu yanıtta döner → merkez panelde görünür, site çökmez.
         if (isset($body['siteIdentity']) && is_array($body['siteIdentity']) && class_exists('WPD_Setup')) {
-            $r = WPD_Setup::apply($body['siteIdentity']);
-            $results[] = ['type' => 'siteIdentity', 'status' => 'applied', 'done' => $r['done'], 'skipped' => $r['skipped']];
+            try {
+                $r = WPD_Setup::apply($body['siteIdentity']);
+                $results[] = ['type' => 'siteIdentity', 'status' => 'applied', 'done' => $r['done'], 'skipped' => $r['skipped']];
+            } catch (\Throwable $e) {
+                $results[] = ['type' => 'siteIdentity', 'status' => 'error', 'error' => $e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine()];
+            }
         }
 
         // LiteSpeed Cache: ürün/fiyat/kategori değişti → mağaza & arşiv sayfalarını tazele
