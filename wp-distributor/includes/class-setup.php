@@ -17,6 +17,8 @@ class WPD_Setup {
     const IDENTITY_OPTION = 'wpd_site_identity';   // kimlik ham verisi (shortcode/footer için)
     const SIDELOAD_MAP    = 'wpd_sideload_map';     // URL → attachment id (idempotent görsel indirme)
 
+    private static $sideload_err = '';             // son sideload hatası (skipped raporu için)
+
     public static function init() {
         add_shortcode('wpd_field', [__CLASS__, 'field_shortcode']);
     }
@@ -52,14 +54,14 @@ class WPD_Setup {
         if (!empty($id['faviconUrl'])) {
             $fid = self::sideload($id['faviconUrl']);
             if ($fid) { update_option('site_icon', $fid); $done[] = 'site_icon'; }
-            else { $skipped[] = 'site_icon(indirilemedi)'; }
+            else { $skipped[] = 'site_icon(' . self::$sideload_err . ')'; }
         }
 
         // 4) Logo (WP standart custom_logo)
         if (!empty($id['logoUrl'])) {
             $lid = self::sideload($id['logoUrl']);
             if ($lid) { set_theme_mod('custom_logo', $lid); $done[] = 'custom_logo'; }
-            else { $skipped[] = 'custom_logo(indirilemedi)'; }
+            else { $skipped[] = 'custom_logo(' . self::$sideload_err . ')'; }
         }
 
         // 5) WooCommerce e-posta ayarları (yalnızca WooCommerce aktifse)
@@ -187,25 +189,49 @@ class WPD_Setup {
         return $n;
     }
 
-    /** URL'den görseli media kütüphanesine indirir → attachment id. Idempotent (URL eşlemesi saklanır). */
+    /**
+     * URL'den görseli media kütüphanesine indirir → attachment id. Idempotent (URL eşlemesi saklanır).
+     * media_handle_sideload REST bağlamında (login'siz) takıldığı için sağlam yöntem:
+     * download_url → wp_upload_bits → wp_insert_attachment → metadata. Başarısızsa 0 + self::$sideload_err.
+     */
     private static function sideload($url) {
+        self::$sideload_err = '';
         $url = esc_url_raw($url);
-        if ($url === '') return 0;
+        if ($url === '') { self::$sideload_err = 'url boş'; return 0; }
         $map = get_option(self::SIDELOAD_MAP, []);
         if (!is_array($map)) $map = [];
         if (isset($map[$url]) && get_post($map[$url])) return (int) $map[$url];
 
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        require_once ABSPATH . 'wp-admin/includes/media.php';
-        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';   // download_url
+        require_once ABSPATH . 'wp-admin/includes/image.php';  // wp_generate_attachment_metadata
 
         $tmp = download_url($url, 20); // 20 sn timeout — hanging indirme max_execution_time'ı yemesin
-        if (is_wp_error($tmp)) return 0;
+        if (is_wp_error($tmp)) { self::$sideload_err = 'indirme: ' . $tmp->get_error_message(); return 0; }
+
+        $bytes = @file_get_contents($tmp);
+        @unlink($tmp);
+        if ($bytes === false || $bytes === '') { self::$sideload_err = 'boş dosya'; return 0; }
+
         $name = basename(parse_url($url, PHP_URL_PATH));
-        if ($name === '' || strpos($name, '.') === false) $name = 'logo-' . time() . '.png';
-        $file = ['name' => $name, 'tmp_name' => $tmp];
-        $aid = media_handle_sideload($file, 0);
-        if (is_wp_error($aid)) { @unlink($tmp); return 0; }
+        if ($name === '' || strpos($name, '.') === false) $name = 'brand-' . time() . '.png';
+        $name = sanitize_file_name($name);
+
+        // wp_upload_bits: dosyayı uploads klasörüne doğrudan yazar (wp_handle_sideload'un form/type
+        // kontrollerini atlar → login'siz REST'te güvenilir)
+        $up = wp_upload_bits($name, null, $bytes);
+        if (!empty($up['error'])) { self::$sideload_err = 'upload: ' . $up['error']; return 0; }
+
+        $ftype = wp_check_filetype($up['file']);
+        $aid = wp_insert_attachment([
+            'post_mime_type' => $ftype['type'] ? $ftype['type'] : 'image/png',
+            'post_title'     => $name,
+            'post_status'    => 'inherit',
+        ], $up['file']);
+        if (is_wp_error($aid) || !$aid) { self::$sideload_err = 'attachment oluşmadı'; return 0; }
+
+        $meta = wp_generate_attachment_metadata($aid, $up['file']);
+        if (is_array($meta)) wp_update_attachment_metadata($aid, $meta);
+
         $map[$url] = (int) $aid;
         update_option(self::SIDELOAD_MAP, $map);
         return (int) $aid;
