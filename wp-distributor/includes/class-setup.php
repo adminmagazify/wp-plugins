@@ -57,11 +57,18 @@ class WPD_Setup {
             else { $skipped[] = 'site_icon(' . self::$sideload_err . ')'; }
         }
 
-        // 4) Logo (WP standart custom_logo)
+        // 4) Logo — hem WP standart custom_logo hem TEMA'nın kendi logo alanları (loobek gibi
+        // temalar custom_logo yerine kendi option'unda URL tutar → görünen logo orası).
         if (!empty($id['logoUrl'])) {
             $lid = self::sideload($id['logoUrl']);
-            if ($lid) { set_theme_mod('custom_logo', $lid); $done[] = 'custom_logo'; }
-            else { $skipped[] = 'custom_logo(' . self::$sideload_err . ')'; }
+            if ($lid) {
+                set_theme_mod('custom_logo', $lid);
+                $done[] = 'custom_logo';
+                $local = wp_get_attachment_url($lid);           // sitenin kendi uploads URL'i
+                $tl = self::apply_theme_logo($local ? $local : $id['logoUrl']);
+                if (!empty($tl)) { $done[] = 'theme_logo(' . implode(',', $tl) . ')'; }
+                else { $skipped[] = 'theme_logo(tema logo alanı bulunamadı)'; }
+            } else { $skipped[] = 'custom_logo(' . self::$sideload_err . ')'; }
         }
 
         // 5) WooCommerce e-posta ayarları (yalnızca WooCommerce aktifse)
@@ -235,6 +242,56 @@ class WPD_Setup {
         $map[$url] = (int) $aid;
         update_option(self::SIDELOAD_MAP, $map);
         return (int) $aid;
+    }
+
+    /**
+     * TEMA LOGOSU: loobek gibi temalar logoyu custom_logo yerine KENDİ option'unda URL olarak tutar.
+     * GÜVENLİ otomatik tespit: yalnızca tema slug'lı option'lara (Redux vb.) + theme_mods_{slug}
+     * dokunur; içinde SADECE adı 'logo' geçen + değeri uploads URL'i olan alanları yeni logoyla
+     * değiştirir (text_logo gibi metin alanlarına dokunmaz). Ne değiştirdiğini döndürür.
+     */
+    private static function apply_theme_logo($logo_url) {
+        global $wpdb;
+        if (!self::is_upload_url($logo_url) && !preg_match('#^https?://#', (string) $logo_url)) return [];
+        $slug = get_stylesheet();
+        $changed = [];
+        $names = $wpdb->get_col($wpdb->prepare(
+            "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name = %s LIMIT 30",
+            '%' . $wpdb->esc_like($slug) . '%', 'theme_mods_' . $slug
+        ));
+        foreach ((array) $names as $name) {
+            $val = get_option($name);
+            if (!is_array($val)) continue;
+            if (self::replace_logo_urls($val, $logo_url, $name, $changed)) {
+                update_option($name, $val);
+            }
+        }
+        return $changed;
+    }
+
+    /** Diziyi gezip 'logo' anahtarlı + uploads URL'li alanları $logo_url ile değiştirir (recursive). */
+    private static function replace_logo_urls(&$arr, $logo_url, $path, &$changed) {
+        $did = false;
+        foreach ($arr as $k => &$v) {
+            $kp = $path . '.' . $k;
+            $key_is_logo = (is_string($k) && preg_match('/logo/i', $k));
+            if (is_array($v)) {
+                // Redux media alanı: logo anahtarı altında ['url' => '...']
+                if ($key_is_logo && isset($v['url']) && is_string($v['url']) && self::is_upload_url($v['url'])) {
+                    $v['url'] = $logo_url; $changed[] = $kp . '.url'; $did = true;
+                    if (isset($v['id'])) unset($v['id']); // eski attachment id'sini bırak
+                } elseif (self::replace_logo_urls($v, $logo_url, $kp, $changed)) {
+                    $did = true;
+                }
+            } elseif ($key_is_logo && is_string($v) && self::is_upload_url($v)) {
+                $v = $logo_url; $changed[] = $kp; $did = true;
+            }
+        }
+        return $did;
+    }
+
+    private static function is_upload_url($s) {
+        return is_string($s) && preg_match('#^https?://#', $s) && strpos($s, '/wp-content/uploads/') !== false;
     }
 
     /**
