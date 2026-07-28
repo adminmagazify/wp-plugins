@@ -37,8 +37,12 @@ class WPD_Setup {
         $done = [];
         $skipped = [];
 
-        // Kimliği ham olarak sakla (shortcode/footer/yasal buradan okur)
-        update_option(self::IDENTITY_OPTION, $id);
+        // Kimliği sakla (shortcode/footer/yasal buradan okur). GÜVENLİK: şifreleri ÇIKAR
+        // (düz metin parola DB'de kalmasın) + autoload='no' (her sayfada belleğe yüklenmesin).
+        $store = $id;
+        if (isset($store['smtp']['pass'])) unset($store['smtp']['pass']);
+        if (isset($store['manager']['password'])) unset($store['manager']['password']);
+        update_option(self::IDENTITY_OPTION, $store, 'no');
 
         // 1) Site başlığı / slogan
         if (!empty($id['siteName']))  { update_option('blogname', sanitize_text_field($id['siteName']));        $done[] = 'blogname'; }
@@ -155,7 +159,16 @@ class WPD_Setup {
         $email = !empty($m['email']) && is_email($m['email']) ? sanitize_email($m['email']) : '';
         $existing = get_user_by('login', $login);
         if ($existing) {
-            $upd = ['ID' => $existing->ID, 'role' => 'shop_manager'];
+            // GÜVENLİK: mevcut kullanıcı administrator/süper admin ise DOKUNMA — rolünü düşürmek
+            // veya şifresini ezmek siteyi yönetimsel olarak kilitler. (Kullanıcı adı çakışması.)
+            if (in_array('administrator', (array) $existing->roles, true) || is_super_admin($existing->ID)) {
+                return 'skipped-admin';
+            }
+            // Rolü DEĞİŞTİRME (set_role tüm rolleri siler) → shop_manager'ı EKLE, mevcutları koru
+            if (!in_array('shop_manager', (array) $existing->roles, true)) {
+                $existing->add_role('shop_manager');
+            }
+            $upd = ['ID' => $existing->ID]; // 'role' anahtarı YOK → roller korunur
             if ($email) $upd['user_email'] = $email;
             if (!empty($m['firstName'])) $upd['first_name'] = sanitize_text_field($m['firstName']);
             if (!empty($m['lastName']))  $upd['last_name']  = sanitize_text_field($m['lastName']);
