@@ -75,6 +75,13 @@ class WPD_Setup {
             } else { $skipped[] = 'custom_logo(' . self::$sideload_err . ')'; }
         }
 
+        // 4.5) Sosyal medya (Instagram vb.) — temanın kendi sosyal alanlarına yaz (logo mantığı)
+        if (!empty($id['social']) && is_array($id['social'])) {
+            $ts = self::apply_theme_social($id['social']);
+            if (!empty($ts)) { $done[] = 'theme_social(' . implode(',', $ts) . ')'; }
+            else { $skipped[] = 'theme_social(tema sosyal alanı bulunamadı)'; }
+        }
+
         // 5) WooCommerce e-posta ayarları (yalnızca WooCommerce aktifse)
         if (class_exists('WooCommerce')) {
             $siteEmail  = !empty($id['contactEmail']) ? sanitize_email($id['contactEmail']) : '';
@@ -307,6 +314,48 @@ class WPD_Setup {
         return is_string($s) && preg_match('#^https?://#', $s) && strpos($s, '/wp-content/uploads/') !== false;
     }
 
+    /**
+     * Sosyal medya: temanın kendi sosyal link alanlarına (loobek Redux vb.) klonun linklerini yazar.
+     * GÜVENLİ: yalnızca tema slug'lı option'lar; adı platformu (instagram/facebook…) içeren + değeri
+     * URL/boş olan alanları o platformun linkiyle değiştirir. $social = { instagram: url, ... }.
+     */
+    private static function apply_theme_social($social) {
+        global $wpdb;
+        $social = array_filter((array) $social); // boşları at
+        if (empty($social)) return [];
+        $slug = get_stylesheet();
+        $changed = [];
+        $names = $wpdb->get_col($wpdb->prepare(
+            "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name = %s LIMIT 30",
+            '%' . $wpdb->esc_like($slug) . '%', 'theme_mods_' . $slug
+        ));
+        foreach ((array) $names as $name) {
+            $val = get_option($name);
+            if (!is_array($val)) continue;
+            if (self::replace_social_keys($val, $social, $name, $changed)) update_option($name, $val);
+        }
+        return $changed;
+    }
+
+    private static function replace_social_keys(&$arr, $social, $path, &$changed) {
+        $did = false;
+        foreach ($arr as $k => &$v) {
+            $kp = $path . '.' . $k;
+            if (is_array($v)) {
+                if (self::replace_social_keys($v, $social, $kp, $changed)) $did = true;
+            } elseif (is_string($k) && is_string($v)) {
+                foreach ($social as $plat => $url) {
+                    // anahtar platform adını içeriyor + değer URL ya da boş → o platformun linkini yaz
+                    if (stripos($k, $plat) !== false && ($v === '' || preg_match('#^https?://#', $v))) {
+                        if ($v !== $url) { $v = $url; $changed[] = $kp; $did = true; }
+                        break;
+                    }
+                }
+            }
+        }
+        return $did;
+    }
+
     /** TEŞHİS: bir değer ağacında $needle'ın hangi key yolunda geçtiğini bulur (scanOption için). */
     public static function find_paths($val, $needle, $path, &$out) {
         if (is_string($val)) {
@@ -323,13 +372,15 @@ class WPD_Setup {
     }
 
     /**
-     * [wpd_field key="site_title|tagline|contact_email|company_name|website|copyright"]
+     * [wpd_field key="site_title|tagline|contact_email|company_name|website|copyright|instagram"]
      * Yasal sayfalar ve footer bu shortcode'u kullanır → klonda hiç düzenlenmez, değer otomatik gelir.
+     * instagram: e-posta gibi metin döner; link istenirse [wpd_field key="instagram"] bir href içine konur.
      */
     public static function field_shortcode($atts) {
         $a = shortcode_atts(['key' => ''], $atts, 'wpd_field');
         $id = get_option(self::IDENTITY_OPTION, []);
         if (!is_array($id)) $id = [];
+        $social = isset($id['social']) && is_array($id['social']) ? $id['social'] : [];
         switch ($a['key']) {
             case 'site_title':    return esc_html(get_bloginfo('name'));
             case 'tagline':       return esc_html(get_bloginfo('description'));
@@ -337,6 +388,8 @@ class WPD_Setup {
             case 'company_name':  return esc_html(!empty($id['legalCompany']) ? $id['legalCompany'] : get_bloginfo('name'));
             case 'website':       return esc_html(!empty($id['websiteUrl']) ? $id['websiteUrl'] : home_url());
             case 'copyright':     return esc_html(!empty($id['copyrightText']) ? $id['copyrightText'] : ('© ' . date('Y') . ' ' . get_bloginfo('name')));
+            case 'instagram':     return !empty($social['instagram']) ? esc_url($social['instagram']) : '';
+            case 'facebook':      return !empty($social['facebook']) ? esc_url($social['facebook']) : '';
             default:              return '';
         }
     }
