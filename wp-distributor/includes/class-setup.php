@@ -296,10 +296,16 @@ class WPD_Setup {
             $kp = $path . '.' . $k;
             $key_is_logo = (is_string($k) && preg_match('/logo/i', $k));
             if (is_array($v)) {
-                // Redux media alanı: logo anahtarı altında ['url' => '...']
-                if ($key_is_logo && isset($v['url']) && is_string($v['url']) && self::is_upload_url($v['url'])) {
-                    $v['url'] = $logo_url; $changed[] = $kp . '.url'; $did = true;
-                    if (isset($v['id'])) unset($v['id']); // eski attachment id'sini bırak
+                // Redux media alanı: logo anahtarı altında ['url'=>..., 'thumbnail'=>..., 'id'=>...]
+                // TÜM uploads-URL alt alanlarını değiştir (url VE thumbnail — footer thumbnail'i okuyor).
+                if ($key_is_logo) {
+                    $any = false;
+                    foreach ($v as $sk => &$sv) {
+                        if (is_string($sv) && self::is_upload_url($sv)) { $sv = $logo_url; $changed[] = $kp . '.' . $sk; $did = true; $any = true; }
+                    }
+                    unset($sv);
+                    if ($any) { if (isset($v['id'])) unset($v['id']); }
+                    else if (self::replace_logo_urls($v, $logo_url, $kp, $changed)) { $did = true; }
                 } elseif (self::replace_logo_urls($v, $logo_url, $kp, $changed)) {
                     $did = true;
                 }
