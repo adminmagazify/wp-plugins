@@ -54,11 +54,16 @@ class WPD_Setup {
             $done[] = 'admin_email';
         }
 
-        // 3) Favicon (site_icon) — gerçek attachment gerekir
+        // 3) Favicon — hem WP site_icon hem TEMA'nın kendi favicon alanı (loobek Tema Seçenekleri)
         if (!empty($id['faviconUrl'])) {
             $fid = self::sideload($id['faviconUrl']);
-            if ($fid) { update_option('site_icon', $fid); $done[] = 'site_icon'; }
-            else { $skipped[] = 'site_icon(' . self::$sideload_err . ')'; }
+            if ($fid) {
+                update_option('site_icon', $fid);
+                $done[] = 'site_icon';
+                $flocal = wp_get_attachment_url($fid);
+                $tf = self::apply_theme_favicon($flocal ? $flocal : $id['faviconUrl']);
+                if (!empty($tf)) { $done[] = 'theme_favicon(' . implode(',', $tf) . ')'; }
+            } else { $skipped[] = 'site_icon(' . self::$sideload_err . ')'; }
         }
 
         // 4) Logo — hem WP standart custom_logo hem TEMA'nın kendi logo alanları (loobek gibi
@@ -271,8 +276,18 @@ class WPD_Setup {
      * değiştirir (text_logo gibi metin alanlarına dokunmaz). Ne değiştirdiğini döndürür.
      */
     private static function apply_theme_logo($logo_url) {
+        return self::apply_theme_media($logo_url, '/logo/i');
+    }
+
+    /** TEMA FAVICONU: loobek kendi favicon alanını (Tema Seçenekleri) kullanır — site_icon değil. */
+    private static function apply_theme_favicon($fav_url) {
+        return self::apply_theme_media($fav_url, '/fav_?icon|site_?icon/i');
+    }
+
+    /** Tema slug'lı option'larda $keyRe ile eşleşen + uploads URL'li alanları $url ile değiştirir. */
+    private static function apply_theme_media($url, $keyRe) {
         global $wpdb;
-        if (!self::is_upload_url($logo_url) && !preg_match('#^https?://#', (string) $logo_url)) return [];
+        if (!preg_match('#^https?://#', (string) $url)) return [];
         $slug = get_stylesheet();
         $changed = [];
         $names = $wpdb->get_col($wpdb->prepare(
@@ -282,19 +297,19 @@ class WPD_Setup {
         foreach ((array) $names as $name) {
             $val = get_option($name);
             if (!is_array($val)) continue;
-            if (self::replace_logo_urls($val, $logo_url, $name, $changed)) {
+            if (self::replace_logo_urls($val, $url, $name, $changed, $keyRe)) {
                 update_option($name, $val);
             }
         }
         return $changed;
     }
 
-    /** Diziyi gezip 'logo' anahtarlı + uploads URL'li alanları $logo_url ile değiştirir (recursive). */
-    private static function replace_logo_urls(&$arr, $logo_url, $path, &$changed) {
+    /** Diziyi gezip $keyRe anahtarlı + uploads URL'li alanları $logo_url ile değiştirir (recursive). */
+    private static function replace_logo_urls(&$arr, $logo_url, $path, &$changed, $keyRe = '/logo/i') {
         $did = false;
         foreach ($arr as $k => &$v) {
             $kp = $path . '.' . $k;
-            $key_is_logo = (is_string($k) && preg_match('/logo/i', $k));
+            $key_is_logo = (is_string($k) && preg_match($keyRe, $k));
             if (is_array($v)) {
                 // Redux media alanı: logo anahtarı altında ['url'=>..., 'thumbnail'=>..., 'id'=>...]
                 // TÜM uploads-URL alt alanlarını değiştir (url VE thumbnail — footer thumbnail'i okuyor).
@@ -305,8 +320,8 @@ class WPD_Setup {
                     }
                     unset($sv);
                     if ($any) { if (isset($v['id'])) unset($v['id']); }
-                    else if (self::replace_logo_urls($v, $logo_url, $kp, $changed)) { $did = true; }
-                } elseif (self::replace_logo_urls($v, $logo_url, $kp, $changed)) {
+                    else if (self::replace_logo_urls($v, $logo_url, $kp, $changed, $keyRe)) { $did = true; }
+                } elseif (self::replace_logo_urls($v, $logo_url, $kp, $changed, $keyRe)) {
                     $did = true;
                 }
             } elseif ($key_is_logo && is_string($v) && self::is_upload_url($v)) {
