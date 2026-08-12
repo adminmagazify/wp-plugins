@@ -1,0 +1,507 @@
+/* =========================================================
+   ÜRÜN YÖNETİMİ
+   ========================================================= */
+
+.uy-urun-listesi {
+    width: 100%;
+    font-family: Roboto, Arial, sans-serif;
+    box-sizing: border-box;
+}
+
+.uy-urun-listesi *,
+.uy-urun-listesi *::before,
+.uy-urun-listesi *::after {
+    box-sizing: border-box;
+}
+
+
+/* =========================================================
+   BİLGİ KUTUSU
+   ========================================================= */
+
+.uy-info-box {
+    width: 100%;
+    margin: 10px 0 20px;
+    padding: 14px 18px;
+    border-left: 4px solid #444;
+    background: #f8f8f8;
+    color: #333;
+    font-family: Roboto, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.uy-info-box p {
+    margin: 4px 0;
+}
+
+
+/* =========================================================
+   TABLO BAŞLIĞI
+   ========================================================= */
+
+.uy-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 10px 20px;
+    border-bottom: 2px solid #e2e2e2;
+    color: #666;
+    font-family: Roboto, Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.uy-header-thumb {
+    flex: 0 0 72px;
+    width: 72px;
+    text-align: left;
+}
+
+.uy-header-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+}
+
+.uy-header-net {
+    flex: 0 0 120px;
+    width: 120px;
+    margin-right: 30px;
+    text-align: right;
+}
+
+
+
+.uy-header-price {
+    flex: 0 0 120px;
+    width: 120px;
+    margin-right: 30px;
+    text-align: right;
+}
+
+.uy-header-action {
+    flex: 0 0 80px;
+    width: 80px;
+    text-align: center;
+}
+
+
+/* =========================================================
+   ÜRÜN SATIRI
+   ========================================================= */
+
+.uy-urun-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 86px;
+    padding: 12px 20px;
+    border-bottom: 1px solid #e5e5e5;
+    background: #fff;
+    font-family: Roboto, Arial, sans-serif;
+}
+
+.uy-urun-item > a {
+    display: flex;
+    flex: 0 0 72px;
+    align-items: center;
+    justify-content: flex-start;
+    width: 72px;
+    text-decoration: none;
+}
+
+.uy-urun-item img {
+    display: block;
+    width: 60px;
+    height: 60px;
+    margin: 0;
+    border-radius: 4px;
+    object-fit: contain;
+}
+
+
+/* Ürün İsmi */
+
+.uy-urun-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-right: 20px;
+    overflow-wrap: anywhere;
+    color: #222;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+
+/* Net Hakediş (1) */
+
+.uy-urun-net {
+    flex: 0 0 120px;
+    width: 120px;
+    margin-right: 30px;
+    color: #111;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+}
+
+
+
+
+/* Satış Fiyatı */
+
+.uy-urun-price {
+    flex: 0 0 120px;
+    width: 120px;
+    margin-right: 30px;
+    color: #111;
+    font-size: 16px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+
+/* =========================================================
+   SİLME BUTONU
+   ========================================================= */
+
+.uy-delete-product {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    min-height: 42px;
+    margin: 0;
+    padding: 10px 20px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    background: #000;
+    color: #fff;
+    font-family: Roboto, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1;
+    text-align: center;
+    cursor: pointer;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.uy-delete-product:hover,
+.uy-delete-product:focus {
+    border-color: #333;
+    background: #333;
+    color: #fff;
+}
+
+.uy-delete-product:focus-visible {
+    outline: 2px solid #555;
+    outline-offset: 2px;
+}
+
+.uy-delete-product:disabled {
+    border-color: #999;
+    background: #999;
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   BOŞ ÜRÜN LİSTESİ
+   ========================================================= */
+
+.uy-empty-state {
+    width: 100%;
+    margin-top: 15px;
+    padding: 30px;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    background: #fafafa;
+    color: #666;
+    font-family: Roboto, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+
+/* =========================================================
+   SAYFALAMA
+   ========================================================= */
+
+.uy-pagination {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    margin: 28px 0 10px;
+    padding: 0;
+    clear: both;
+    list-style: none;
+}
+
+.uy-pagination .uy-page-link {
+    display: inline-flex !important;
+    position: static !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 42px;
+    width: 42px !important;
+    min-width: 42px;
+    max-width: 42px;
+    height: 42px;
+    min-height: 42px;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 1px solid #d8d8d8;
+    border-radius: 4px;
+    background: #fff;
+    color: #222;
+    font-family: Roboto, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1 !important;
+    text-align: center;
+    text-decoration: none !important;
+    text-indent: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden;
+}
+
+.uy-pagination a.uy-page-link:hover,
+.uy-pagination a.uy-page-link:focus {
+    border-color: #000;
+    background: #000;
+    color: #fff;
+}
+
+.uy-pagination a.uy-page-link:focus-visible {
+    outline: 2px solid #555;
+    outline-offset: 2px;
+}
+
+.uy-pagination .uy-page-current {
+    border-color: #000;
+    background: #000;
+    color: #fff;
+    font-weight: 700;
+    cursor: default;
+}
+
+.uy-pagination .uy-page-prev,
+.uy-pagination .uy-page-next {
+    font-size: 22px;
+    font-weight: 400;
+}
+
+
+/* Tema kaynaklı çizgi ve ikonları kapatır */
+
+.uy-pagination::before,
+.uy-pagination::after,
+.uy-pagination .uy-page-link::before,
+.uy-pagination .uy-page-link::after {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    content: none !important;
+}
+
+
+/* =========================================================
+   TABLET GÖRÜNÜMÜ
+   ========================================================= */
+
+@media (max-width: 1100px) {
+
+    .uy-header,
+    .uy-urun-item {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+
+.uy-header-net,
+
+.uy-header-price,
+
+.uy-urun-net,
+
+.uy-urun-price {
+
+    flex-basis: 105px;
+
+    width: 105px;
+
+    margin-right: 16px;
+
+}
+
+    .uy-header-action {
+        flex-basis: 70px;
+        width: 70px;
+    }
+
+    .uy-delete-product {
+        min-width: 60px;
+        padding-right: 14px;
+        padding-left: 14px;
+    }
+}
+
+
+/* =========================================================
+   MOBİL GÖRÜNÜM
+   ========================================================= */
+
+@media (max-width: 768px) {
+
+    .uy-info-box {
+        padding: 12px 14px;
+        font-size: 12px;
+    }
+
+    .uy-header {
+        display: none;
+    }
+
+    .uy-urun-item {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr);
+        align-items: start;
+        gap: 8px 14px;
+        min-height: 0;
+        padding: 16px 12px;
+    }
+
+    .uy-urun-item > a {
+        grid-column: 1;
+        grid-row: 1 / span 4;
+        width: 72px;
+    }
+
+    .uy-urun-item img {
+        width: 60px;
+        height: 60px;
+    }
+
+    .uy-urun-title {
+        grid-column: 2;
+        width: auto;
+        padding-right: 0;
+        font-size: 15px;
+        font-weight: 600;
+    }
+
+.uy-urun-net,
+
+.uy-urun-price {
+
+    grid-column: 2;
+
+    width: auto;
+
+    margin: 0;
+
+    font-size: 14px;
+
+    text-align: left;
+
+    white-space: normal;
+
+}
+
+    .uy-urun-net::before {
+        content: "Net Hakediş: ";
+        font-weight: 400;
+    }
+
+    .uy-urun-price::before {
+        content: "Satış Fiyatı: ";
+        font-weight: 400;
+    }
+
+    .uy-delete-product {
+        grid-column: 2;
+        width: max-content;
+        min-width: 70px;
+        margin-top: 4px;
+    }
+
+    .uy-pagination {
+        gap: 6px;
+        margin-top: 22px;
+    }
+
+    .uy-pagination .uy-page-link {
+        flex-basis: 38px;
+        width: 38px !important;
+        min-width: 38px;
+        max-width: 38px;
+        height: 38px;
+        min-height: 38px;
+    }
+}
+
+
+/* =========================================================
+   ÇOK KÜÇÜK EKRANLAR
+   ========================================================= */
+
+@media (max-width: 420px) {
+
+    .uy-urun-item {
+        grid-template-columns: 58px minmax(0, 1fr);
+        gap: 7px 10px;
+        padding: 14px 8px;
+    }
+
+    .uy-urun-item > a {
+        width: 58px;
+    }
+
+    .uy-urun-item img {
+        width: 50px;
+        height: 50px;
+    }
+
+    .uy-urun-title {
+        font-size: 14px;
+    }
+
+.uy-urun-net,
+
+.uy-urun-price {
+
+    font-size: 13px;
+
+}
+
+    .uy-pagination {
+        gap: 5px;
+    }
+
+    .uy-pagination .uy-page-link {
+        flex-basis: 34px;
+        width: 34px !important;
+        min-width: 34px;
+        max-width: 34px;
+        height: 34px;
+        min-height: 34px;
+        font-size: 13px;
+    }
+
+    .uy-pagination .uy-page-prev,
+    .uy-pagination .uy-page-next {
+        font-size: 19px;
+    }
+}

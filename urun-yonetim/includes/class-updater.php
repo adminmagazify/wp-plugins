@@ -5,26 +5,24 @@ if (!defined('ABSPATH')) {
 
 /**
  * GitHub release tabanlı otomatik güncelleyici (dış bağımlılık yok).
- *
- * Merkezdeki "wp-plugins" repo'sunda bu plugin için yayınlanan en yeni release'i
- * kontrol eder ve WordPress'in standart güncelleme sistemine bildirir. Böylece
- * tüm sitelerde Eklentiler sayfasında "güncelleme var" görünür (veya otomatik
- * güncelleme açıksa kendiliğinden güncellenir).
+ * wp-distributor ile aynı desen: merkez API'yi (Railway) sorar, o da GitHub'ı
+ * sunucu tarafında tek noktadan sorup cache'ler — 1000 site GitHub'ın IP başına
+ * 60 istek/saat limitine (403) takılmaz. Zip yine GitHub release'den iner.
  *
  * Release konvansiyonu (monorepo'da birden çok plugin'i ayırmak için):
- *   - Tag:   wp-distributor-1.1.3   (TAG_PREFIX + sürüm)
- *   - Asset: wp-distributor.zip     (release'e eklenen kurulabilir zip)
+ *   Tag:   urun-yonetim-1.5   (TAG_PREFIX + sürüm)
+ *   Asset: urun-yonetim.zip
  */
-class WPD_Updater {
+class UY_Updater {
 
+    const CENTRAL_URL = 'https://api-production-76ce.up.railway.app';
+    const PLUGIN_SLUG_ID = 'urun-yonetim'; // merkez API'de ?slug= parametresi
     const GITHUB_REPO = 'adminmagazify/wp-plugins';
-    const TAG_PREFIX  = 'wp-distributor-';
-    const ASSET_NAME  = 'wp-distributor.zip';
-    const CACHE_KEY   = 'wpd_update_check';
-    const CACHE_TTL   = 21600; // 6 saat (GitHub API'yi yormamak için)
+    const CACHE_KEY   = 'uy_update_check';
+    const CACHE_TTL   = 21600; // 6 saat
 
-    protected static $plugin_file; // wp-distributor/wp-distributor.php
-    protected static $plugin_slug; // wp-distributor
+    protected static $plugin_file;
+    protected static $plugin_slug;
 
     public static function init($plugin_file) {
         self::$plugin_file = plugin_basename($plugin_file);
@@ -36,13 +34,7 @@ class WPD_Updater {
         add_action('upgrader_process_complete', [__CLASS__, 'clear_cache'], 10, 0);
     }
 
-    /**
-     * En yeni sürümü MERKEZ API'den (Railway) sorar — doğrudan GitHub'a değil.
-     * Merkez, GitHub'ı sunucu tarafında tek noktadan sorup cache'ler; böylece siteler
-     * GitHub'ın IP başına 60 istek/saat limitine (403) takılmaz. Zip yine GitHub'dan iner.
-     */
     protected static function get_latest_release() {
-        // "Yeniden kontrol et" (force-check) yapıldığında cache'i atla.
         $force = !empty($_GET['force-check']);
 
         if (!$force) {
@@ -52,23 +44,23 @@ class WPD_Updater {
             }
         }
 
-        $url = WPD_Api_Client::central_url() . '/api/public/plugin-update';
+        $url = self::CENTRAL_URL . '/api/public/plugin-update?slug=' . self::PLUGIN_SLUG_ID;
         $res = wp_remote_get($url, [
             'timeout' => 15,
             'headers' => [
                 'Accept'     => 'application/json',
-                'User-Agent' => 'wp-distributor-updater',
+                'User-Agent' => 'uy-updater',
             ],
         ]);
 
         if (is_wp_error($res) || wp_remote_retrieve_response_code($res) !== 200) {
-            set_transient(self::CACHE_KEY, '', 1800); // hata: 30 dk kısa cache
+            set_transient(self::CACHE_KEY, '', 1800);
             return null;
         }
 
         $data = json_decode(wp_remote_retrieve_body($res), true);
         if (!is_array($data) || empty($data['version']) || empty($data['download_url'])) {
-            set_transient(self::CACHE_KEY, '', 900); // sürüm yok/eksik: 15 dk
+            set_transient(self::CACHE_KEY, '', 900);
             return null;
         }
 
@@ -76,14 +68,13 @@ class WPD_Updater {
             'version'   => (string) $data['version'],
             'download'  => (string) $data['download_url'],
             'changelog' => isset($data['changelog']) ? $data['changelog'] : '',
-            'name'      => isset($data['name']) ? $data['name'] : 'Magazify WP Distributor',
+            'name'      => isset($data['name']) ? $data['name'] : 'Magazify Ürün Yönetim',
         ];
 
         set_transient(self::CACHE_KEY, $best, self::CACHE_TTL);
         return $best;
     }
 
-    /** WordPress güncelleme kontrolüne yeni sürümü ekler. */
     public static function check_for_update($transient) {
         if (empty($transient) || empty($transient->checked)) {
             return $transient;
@@ -91,7 +82,7 @@ class WPD_Updater {
 
         $current = isset($transient->checked[self::$plugin_file])
             ? $transient->checked[self::$plugin_file]
-            : (defined('WPD_VERSION') ? WPD_VERSION : '0');
+            : (defined('UY_VERSION') ? UY_VERSION : '0');
 
         $latest = self::get_latest_release();
 
@@ -104,7 +95,6 @@ class WPD_Updater {
                 'url'         => 'https://github.com/' . self::GITHUB_REPO,
             ];
         } else {
-            // Güncel: no_update listesine ekle ki Eklentiler sayfası düzgün davransın
             unset($transient->response[self::$plugin_file]);
             $transient->no_update[self::$plugin_file] = (object) [
                 'slug'        => self::$plugin_slug,
@@ -118,12 +108,10 @@ class WPD_Updater {
         return $transient;
     }
 
-    /** "Ayrıntıları gör" popup'ı için bilgi sağlar (merkez API erişilemese bile kurulu dosyadan doldurur). */
     public static function plugin_info($result, $action, $args) {
         if ($action !== 'plugin_information' || empty($args->slug) || $args->slug !== self::$plugin_slug) {
             return $result;
         }
-        // Kurulu plugin başlığından bilgi (API çekilemese bile "Plugin not found" olmasın)
         $header = ['Version' => 'Version', 'Name' => 'Plugin Name', 'Description' => 'Description', 'Author' => 'Author'];
         $data = @get_file_data(WP_PLUGIN_DIR . '/' . self::$plugin_file, $header);
 
@@ -133,23 +121,19 @@ class WPD_Updater {
         $changelog = ($latest && !empty($latest['changelog'])) ? nl2br(esc_html($latest['changelog'])) : 'Değişiklik notu bulunmuyor.';
 
         return (object) [
-            'name'          => !empty($data['Name']) ? $data['Name'] : 'Magazify WP Distributor',
+            'name'          => !empty($data['Name']) ? $data['Name'] : 'Magazify Ürün Yönetim',
             'slug'          => self::$plugin_slug,
             'version'       => $version,
-            'author'        => !empty($data['Author']) ? $data['Author'] : 'WP Central',
+            'author'        => !empty($data['Author']) ? $data['Author'] : 'Magazify',
             'homepage'      => 'https://github.com/' . self::GITHUB_REPO,
             'download_link' => $download,
             'sections'      => [
-                'description' => !empty($data['Description']) ? $data['Description'] : 'Merkez panelden ürünleri otomatik alır ve WooCommerce\'e aktarır.',
+                'description' => !empty($data['Description']) ? $data['Description'] : 'Ürün Yönetim Eklentisi.',
                 'changelog'   => $changelog,
             ],
         ];
     }
 
-    /**
-     * İndirilen zip'in kök klasörünün plugin slug'ıyla (wp-distributor) eşleşmesini sağlar.
-     * Asset zaten wp-distributor/ ile paketlendiği için normalde sorun çıkmaz; bu bir güvencedir.
-     */
     public static function fix_source_dir($source, $remote_source, $upgrader, $hook_extra = null) {
         if (empty($hook_extra['plugin']) || $hook_extra['plugin'] !== self::$plugin_file) {
             return $source;
@@ -162,7 +146,6 @@ class WPD_Updater {
         if (untrailingslashit($source) === untrailingslashit($desired)) {
             return $source;
         }
-        // Hedef zaten varsa önce sil
         if ($wp_filesystem->is_dir(untrailingslashit($desired))) {
             $wp_filesystem->delete(untrailingslashit($desired), true);
         }
