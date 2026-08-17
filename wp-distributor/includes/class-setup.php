@@ -126,13 +126,149 @@ class WPD_Setup {
             $done[] = 'manager_user(' . $ures . ')';
         }
 
-        // 8) (opt-in) Eski WooCommerce siparişlerini temizle — klon temiz başlasın
+        // 8) DİREKT YAZI DEĞİŞTİRME (shortcode'suz): sayfa/şablon/widget/Elementor içeriğinde
+        // master metinlerini (örn. footer e-postası) klonun değerleriyle değiştirir.
+        // Instagram: içerikteki tüm instagram.com linkleri klonun hesabına yönlendirilir.
+        if (!empty($id['textReplacements']) || !empty($id['instagramUrl'])) {
+            $tr = self::apply_text_replacements(
+                is_array($id['textReplacements'] ?? null) ? $id['textReplacements'] : [],
+                isset($id['instagramUrl']) ? (string) $id['instagramUrl'] : ''
+            );
+            $done[] = 'text_replace(posts:' . $tr['posts'] . ',widgets:' . $tr['widgets'] . ',elementor:' . $tr['elementor'] . ')';
+        }
+
+        // 9) (opt-in) Eski WooCommerce siparişlerini temizle — klon temiz başlasın
         if (!empty($id['resetOrders']) && function_exists('wc_get_orders')) {
             $deleted = self::reset_orders();
             $done[] = 'reset_orders(' . $deleted . ')';
         }
 
         return ['done' => $done, 'skipped' => $skipped];
+    }
+
+    /* =========================================================================
+       DİREKT YAZI DEĞİŞTİRME
+       Kapsam (bilinçli dar): sayfalar + blok/şablon içerikleri + metin widget'ları +
+       Elementor şablon verisi. Ürün/sipariş içeriklerine DOKUNMAZ.
+       ========================================================================= */
+
+    const REPLACE_POST_TYPES = ['page', 'wp_block', 'wp_template', 'wp_template_part', 'wp_navigation', 'elementor_library'];
+    const REPLACE_WIDGETS    = ['widget_block', 'widget_text', 'widget_custom_html', 'widget_html'];
+    const INSTAGRAM_RE       = '#https?://(www\.)?instagram\.com/[^"\'\s<>\\\\]*#i';
+
+    /**
+     * $pairs: [{from, to}] birebir metin değişimi (güvenlik: from en az 6 karakter).
+     * $instagram_url: doluysa içerikteki TÜM instagram.com linkleri bununla değiştirilir.
+     * Dönüş: ['posts'=>N,'widgets'=>M,'elementor'=>K] (değişen kayıt sayıları).
+     */
+    private static function apply_text_replacements($pairs, $instagram_url) {
+        global $wpdb;
+        $out = ['posts' => 0, 'widgets' => 0, 'elementor' => 0];
+
+        // Geçerli çiftleri süz (çok kısa "from" tehlikeli — yanlışlıkla her yeri değiştirmesin)
+        $clean = [];
+        foreach ((array) $pairs as $p) {
+            $from = isset($p['from']) ? (string) $p['from'] : '';
+            $to   = isset($p['to']) ? (string) $p['to'] : '';
+            if (strlen($from) >= 6 && $to !== '' && $from !== $to) {
+                $clean[] = ['from' => $from, 'to' => $to];
+            }
+        }
+        $insta = '';
+        if ($instagram_url !== '' && preg_match('#^https?://(www\.)?instagram\.com/#i', $instagram_url)) {
+            $insta = esc_url_raw($instagram_url);
+        }
+        if (empty($clean) && $insta === '') {
+            return $out;
+        }
+
+        // Bir metin üzerinde tüm değişimleri uygular; değişip değişmediğini bildirir.
+        $transform = function ($text) use ($clean, $insta) {
+            $orig = $text;
+            foreach ($clean as $p) {
+                $text = str_replace($p['from'], $p['to'], $text);
+            }
+            if ($insta !== '') {
+                $new = preg_replace(self::INSTAGRAM_RE, $insta, $text);
+                if (is_string($new)) $text = $new;
+            }
+            return [$text, $text !== $orig];
+        };
+
+        // --- 1) Sayfa/şablon içerikleri (wp_posts.post_content) ---
+        $types_in = "'" . implode("','", array_map('esc_sql', self::REPLACE_POST_TYPES)) . "'";
+        $likes = [];
+        foreach ($clean as $p) { $likes[] = $wpdb->prepare('post_content LIKE %s', '%' . $wpdb->esc_like($p['from']) . '%'); }
+        if ($insta !== '') { $likes[] = "post_content LIKE '%instagram.com%'"; }
+        $rows = $wpdb->get_results(
+            "SELECT ID, post_content FROM {$wpdb->posts}
+             WHERE post_type IN ({$types_in}) AND post_status NOT IN ('trash','auto-draft')
+               AND (" . implode(' OR ', $likes) . ') LIMIT 300'
+        );
+        foreach ((array) $rows as $row) {
+            list($new, $changed) = $transform($row->post_content);
+            if ($changed) {
+                $wpdb->update($wpdb->posts, ['post_content' => $new], ['ID' => $row->ID]);
+                clean_post_cache((int) $row->ID);
+                $out['posts']++;
+            }
+        }
+
+        // --- 2) Metin widget'ları (options içinde dizi) ---
+        foreach (self::REPLACE_WIDGETS as $wname) {
+            $val = get_option($wname);
+            if (!is_array($val)) continue;
+            $changed_any = false;
+            $walk = function (&$node) use (&$walk, $transform, &$changed_any) {
+                if (is_array($node)) {
+                    foreach ($node as &$v) { $walk($v); }
+                    unset($v);
+                } elseif (is_string($node) && $node !== '') {
+                    list($new, $changed) = $transform($node);
+                    if ($changed) { $node = $new; $changed_any = true; }
+                }
+            };
+            $walk($val);
+            if ($changed_any) { update_option($wname, $val); $out['widgets']++; }
+        }
+
+        // --- 3) Elementor verisi (_elementor_data JSON) — decode edip string'lerde değiştir,
+        //        escape sorunlarına girmeden aynı biçimde geri yaz (Elementor'un kendi deseni). ---
+        $mlikes = [];
+        foreach ($clean as $p) { $mlikes[] = $wpdb->prepare('meta_value LIKE %s', '%' . $wpdb->esc_like($p['from']) . '%'); }
+        if ($insta !== '') { $mlikes[] = "meta_value LIKE '%instagram.com%'"; }
+        $metas = $wpdb->get_results(
+            "SELECT post_id FROM {$wpdb->postmeta}
+             WHERE meta_key = '_elementor_data' AND (" . implode(' OR ', $mlikes) . ') LIMIT 200'
+        );
+        foreach ((array) $metas as $m) {
+            $raw = get_post_meta((int) $m->post_id, '_elementor_data', true);
+            if (!is_string($raw) || $raw === '') continue;
+            $data = json_decode($raw, true);
+            if (!is_array($data)) continue;
+            $changed_any = false;
+            $walk = function (&$node) use (&$walk, $transform, &$changed_any) {
+                if (is_array($node)) {
+                    foreach ($node as &$v) { $walk($v); }
+                    unset($v);
+                } elseif (is_string($node) && $node !== '') {
+                    list($new, $changed) = $transform($node);
+                    if ($changed) { $node = $new; $changed_any = true; }
+                }
+            };
+            $walk($data);
+            if ($changed_any) {
+                update_post_meta((int) $m->post_id, '_elementor_data', wp_slash(wp_json_encode($data)));
+                $out['elementor']++;
+            }
+        }
+
+        // Elementor CSS önbelleğini tazele (değişen veriler ön yüze yansısın)
+        if ($out['elementor'] > 0 && class_exists('\\Elementor\\Plugin')) {
+            try { \Elementor\Plugin::instance()->files_manager->clear_cache(); } catch (\Throwable $e) { /* sessiz */ }
+        }
+
+        return $out;
     }
 
     /** WP Mail SMTP option'ını günceller (mevcut yapıyı korur, sadece ilgili alanları yazar). */
